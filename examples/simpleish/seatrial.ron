@@ -1,0 +1,34 @@
+(
+    lua_file: "seatrial.lua",
+
+    grunts: [
+        (
+            base_name: "Reloader Grunt",
+            persona: "spam_reloader",
+            count: 10,
+        ),
+    ],
+
+    personas: {
+        "spam_reloader": (
+            timeout: Seconds(30),
+
+            pipeline: [
+                LuaFunction("generate_30_day_range"),
+                Http(Get(
+                    url: "/calendar",
+                    params: {
+                        "start_date": LuaTableValue("start_date"),
+                        "end_date": LuaTableValue("end_date"),
+                    },
+                )),
+                Combinator(AllOf([
+                    WarnUnlessStatusCodeInRange(200, 299),
+                    WarnUnlessHeaderExists("X-Never-Gonna-Give-You-Up"),
+                    LuaFunction("was_valid_esoteric_format"),
+                ])),
+                ControlFlow(GoTo(index: 0, max_times: 2)),
+            ],
+        ),
+    },
+)

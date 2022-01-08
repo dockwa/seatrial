@@ -16,6 +16,16 @@ optimized for taking historical learnings plus data gleamed from the rest of
 your observability stack, and preventing repeats of the same outages (and
 indeed, for helping developers make such scale events, Non-Events).
 
+## Usage
+
+- fill
+- this
+- in
+
+## Development and Packaging
+
+> MSRV: 1.58, as specified in `Cargo.toml`
+
 ## Legal
 
 (c) 2022 The Wanderlust Group, All Rights Reserved
