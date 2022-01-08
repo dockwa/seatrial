@@ -1,0 +1,13 @@
+[package]
+name = "seatrial"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.57"
+
+[dependencies]
+argh = "0.1"
+nanoserde = "0.1"
+rlua = "0.18"
+strfmt = "0.1"
+ureq = "2.4"
+url = "2.2"
