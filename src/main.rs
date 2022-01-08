@@ -361,7 +361,7 @@ fn main() -> std::io::Result<()> {
     drop(args);
 
     let mut situation_threads: Vec<JoinHandle<()>> = Vec::with_capacity(situations.len());
-    let barrier = Arc::new(Barrier::new(situation_threads.len()));
+    let barrier = Arc::new(Barrier::new(situations.len()));
 
     for situation in situations {
         let barrier = barrier.clone();
