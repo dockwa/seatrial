@@ -1,17 +1,36 @@
 use argh::FromArgs;
-use nanoserde::{DeRon, DeRonErr};
 use rlua::Lua;
-use ureq::AgentBuilder;
+use ureq::{Agent, AgentBuilder};
 use url::Url;
 
 use std::collections::HashMap;
-use std::fs::{canonicalize, read_to_string};
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{mpsc, Arc, Barrier};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+
+mod config_duration;
+mod grunt;
+mod persona;
+mod pipeline;
+mod pipeline_action;
+mod situation;
+mod step_goto;
+mod step_http;
+mod step_lua;
+
+use crate::grunt::Grunt;
+use crate::persona::Persona;
+use crate::pipeline::{PipeContents, StepCompletion, StepError};
+use crate::pipeline_action::PipelineAction;
+use crate::situation::{Situation, SituationSpec};
+use crate::step_goto::step as do_step_goto;
+use crate::step_http::{
+    step_delete as do_step_http_delete, step_get as do_step_http_get,
+    step_head as do_step_http_head, step_post as do_step_http_post, step_put as do_step_http_put,
+};
+use crate::step_lua::step_function as do_step_lua_function;
 
 /// situational-mock-based load testing
 #[derive(FromArgs)]
@@ -35,296 +54,6 @@ struct CmdArgs {
     /// optional paths to additional RON files in seatrial(5) situation config format
     #[argh(positional)]
     situations: Vec<SituationSpec>,
-}
-
-// built out of a SituationSpec after post-parse contextual validations have been run
-#[derive(Clone, Debug)]
-struct Situation {
-    base_url: Url,
-    lua_file: Option<PathBuf>,
-    grunts: Vec<Grunt>,
-    personas: Vec<Persona>,
-}
-
-impl Situation {
-    fn from_spec(
-        spec: &SituationSpec,
-        base_url: &Url,
-        grunt_multiplier: usize,
-    ) -> Result<Self, SituationParseErr> {
-        let mut relocated_personas: HashMap<&str, usize> =
-            HashMap::with_capacity(spec.personas.len());
-        let personas = spec
-            .personas
-            .iter()
-            .enumerate()
-            .map(|(idx, (name, spec))| {
-                relocated_personas.insert(name, idx);
-
-                Persona {
-                    name: name.clone(),
-                    spec: spec.clone(),
-
-                    // TODO: populate with Value/LuaFunction returns, error on other PipelineAction
-                    // variants
-                    headers: HashMap::new(),
-                }
-            })
-            .collect();
-        let grunts = {
-            let mut slot: usize = 0;
-            let mut grunts: Vec<Grunt> = Vec::with_capacity(
-                spec.grunts
-                    .iter()
-                    .map(|grunt| grunt.real_count() * grunt_multiplier)
-                    .sum(),
-            );
-
-            for (idx, grunt_spec) in spec.grunts.iter().enumerate() {
-                let num_grunts = grunt_spec.real_count();
-                if num_grunts < 1 {
-                    return Err(SituationParseErr {
-                        kind: SituationParseErrKind::Semantics {
-                            message: "if provided, grunt count must be >=1".into(),
-                            location: format!("grunts[{}]", idx),
-                        },
-                    });
-                }
-                let num_grunts = num_grunts * grunt_multiplier;
-
-                match relocated_personas.get(&*grunt_spec.persona) {
-                    Some(persona_idx) => {
-                        for _ in 0..num_grunts {
-                            grunts.push(Grunt {
-                                name: grunt_spec.formatted_name(slot),
-                                persona_idx: *persona_idx,
-                            });
-                            slot += 1;
-                        }
-                    }
-                    None => {
-                        return Err(SituationParseErr {
-                            kind: SituationParseErrKind::Semantics {
-                                message: format!(
-                                    "grunt refers to non-existent persona \"{}\"",
-                                    grunt_spec.persona
-                                ),
-                                location: format!("grunts[{}]", idx),
-                            },
-                        });
-                    }
-                }
-            }
-
-            grunts
-        };
-
-        Ok(Self {
-            base_url: base_url.clone(),
-            lua_file: spec
-                .lua_file
-                .as_deref()
-                .and_then(|file| canonicalize(file).map(Some).unwrap_or(None)),
-            grunts,
-            personas,
-        })
-    }
-}
-
-#[derive(Clone, Debug, DeRon)]
-struct SituationSpec {
-    lua_file: Option<String>,
-    grunts: Vec<GruntSpec>,
-    personas: HashMap<String, PersonaSpec>,
-}
-
-// build out of a GruntSpec during Situation construction
-#[derive(Clone, Debug)]
-struct Grunt {
-    name: String,
-    persona_idx: usize,
-}
-
-#[derive(Clone, Debug, DeRon)]
-struct GruntSpec {
-    base_name: Option<String>,
-    persona: String,
-    count: Option<usize>,
-}
-
-impl GruntSpec {
-    pub fn formatted_name(&self, uniqueness: impl std::fmt::Display) -> String {
-        format!(
-            "{} {}",
-            self.base_name
-                .clone()
-                .unwrap_or_else(|| format!("Grunt<{}>", self.persona)),
-            uniqueness,
-        )
-    }
-
-    pub fn real_count(&self) -> usize {
-        self.count.unwrap_or(1)
-    }
-}
-
-// built out of a PersonaSpec during Situation construction
-#[derive(Clone, Debug)]
-struct Persona {
-    name: String,
-    spec: PersonaSpec,
-    headers: HashMap<String, String>,
-}
-
-#[derive(Clone, Debug, DeRon)]
-struct PersonaSpec {
-    timeout: ConfigDuration,
-    headers: Option<HashMap<String, PipelineAction>>,
-    pipeline: Vec<PipelineAction>,
-}
-
-#[derive(Clone, Debug, DeRon)]
-enum ConfigDuration {
-    Milliseconds(u64),
-    Seconds(u64),
-}
-
-impl From<&ConfigDuration> for Duration {
-    fn from(src: &ConfigDuration) -> Self {
-        match src {
-            ConfigDuration::Milliseconds(ms) => Duration::from_millis(*ms),
-            ConfigDuration::Seconds(ms) => Duration::from_secs(*ms),
-        }
-    }
-}
-
-#[derive(Clone, Debug, DeRon)]
-enum PipelineAction {
-    GoTo {
-        index: usize,
-        max_times: Option<usize>,
-    },
-    // this is mostly used for URL params, since those _can_ come from Lua, and thus have to be a
-    // PipelineAction member
-    Value(String),
-
-    // http verbs. this section could be fewer LOC with macros eg
-    // https://stackoverflow.com/a/37007315/17630058, but (1) this is still manageable (there's
-    // only a few HTTP verbs), and (2) rust macros are cryptic enough to a passer-by that if we're
-    // going to introduce them and their mental overhead to this codebase (other than depending on
-    // a few from crates), we should have a strong reason (and perhaps multiple usecases).
-
-    // TODO: figure out what, if anything, are appropriate guardrails for a PATCH verb
-    Delete {
-        url: String,
-        headers: Option<HashMap<String, PipelineAction>>,
-        params: Option<HashMap<String, PipelineAction>>,
-        timeout_ms: Option<u64>,
-    },
-    Get {
-        url: String,
-        headers: Option<HashMap<String, PipelineAction>>,
-        params: Option<HashMap<String, PipelineAction>>,
-        timeout_ms: Option<u64>,
-    },
-    Head {
-        url: String,
-        headers: Option<HashMap<String, PipelineAction>>,
-        params: Option<HashMap<String, PipelineAction>>,
-        timeout_ms: Option<u64>,
-    },
-    Post {
-        url: String,
-        headers: Option<HashMap<String, PipelineAction>>,
-        params: Option<HashMap<String, PipelineAction>>,
-        timeout_ms: Option<u64>,
-    },
-    Put {
-        url: String,
-        headers: Option<HashMap<String, PipelineAction>>,
-        params: Option<HashMap<String, PipelineAction>>,
-        timeout_ms: Option<u64>,
-    },
-
-    // validations of whatever the current thing in the pipe is. Asserts are generally fatal when
-    // falsey, except in the context of an AnyOf or NoneOf combinator, which can "catch" the errors
-    // as appropriate. WarnUnless validations are never fatal and likewise can never fail a
-    // combinator
-    AssertHeaderExists(String),
-    AssertStatusCode(u16),
-    AssertStatusCodeInRange(u16, u16),
-    WarnUnlessHeaderExists(String),
-    WarnUnlessStatusCode(u16),
-    WarnUnlessStatusCodeInRange(u16, u16),
-
-    // basic logic. rust doesn't allow something like
-    // All(AssertStatusCode|AssertStatusCodeInRange), so instead, **any** PipelineAction is a valid
-    // member of a combinator for now, which is less than ideal ergonomically to say the least
-    AllOf(Vec<PipelineAction>),
-    AnyOf(Vec<PipelineAction>),
-    NoneOf(Vec<PipelineAction>),
-
-    // the "Here Be Dragons" section, for when dynamism is absolutely needed: an escape hatch to
-    // Lua. TODO: document the Lua APIs and semantics...
-    LuaFunction(String),
-    LuaValue,
-    LuaTableIndex(usize),
-    LuaTableValue(String),
-}
-
-#[derive(Debug)]
-struct SituationParseErr {
-    kind: SituationParseErrKind,
-}
-
-#[derive(Debug)]
-enum SituationParseErrKind {
-    IO(std::io::Error),
-    Parsing(DeRonErr),
-    Semantics {
-        message: String,
-        location: String, // should we try to refer back to line numbers in the config somehow?
-    },
-}
-
-impl SituationParseErr {
-    pub fn message(&self) -> String {
-        match &self.kind {
-            SituationParseErrKind::IO(err) => err.to_string(),
-            SituationParseErrKind::Parsing(err) => err.to_string(),
-            SituationParseErrKind::Semantics { message, .. } => message.clone(),
-        }
-    }
-}
-
-impl std::fmt::Display for SituationParseErr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SituationParseErr: {}", self.message())
-    }
-}
-
-impl From<std::io::Error> for SituationParseErr {
-    fn from(src: std::io::Error) -> Self {
-        Self {
-            kind: SituationParseErrKind::IO(src),
-        }
-    }
-}
-
-impl From<DeRonErr> for SituationParseErr {
-    fn from(src: DeRonErr) -> Self {
-        Self {
-            kind: SituationParseErrKind::Parsing(src),
-        }
-    }
-}
-
-impl FromStr for SituationSpec {
-    type Err = SituationParseErr;
-
-    fn from_str(it: &str) -> Result<Self, Self::Err> {
-        Ok(DeRon::deserialize_ron(&read_to_string(canonicalize(it)?)?)?)
-    }
 }
 
 fn main() -> std::io::Result<()> {
@@ -400,22 +129,230 @@ fn grunt_worker(
     grunt: &Grunt,
     tx: mpsc::Sender<String>,
 ) {
-    let lua = Lua::new();
+    let mut lua = Lua::new();
+
+    if let Some(file) = situation.lua_file.as_ref() {
+        let fpath = if let Some(parent) = file.parent() {
+            let mut ret = parent.to_path_buf();
+            ret.push("?.lua");
+            ret.to_string_lossy().into_owned()
+        } else {
+            file.to_string_lossy().into_owned()
+        };
+        let fname = file
+            .file_stem()
+            .unwrap_or_else(|| file.as_os_str())
+            .to_string_lossy();
+
+        // TODO: something cleaner than unwrap() here
+        lua.context(|ctx| {
+            ctx.load(&format!(
+                "package.path = package.path .. \";{}\"; user_script = require('{}')",
+                fpath, fname
+            ))
+            .set_name(&format!("user_script<{}, {}>", grunt.name, fpath))?
+            .exec()
+        })
+        .unwrap_or_else(|err| {
+            eprintln!("[{}] aborting due to lua error", grunt.name);
+            eprintln!("[{}] err was: {}", grunt.name, err);
+            panic!();
+        });
+    }
+
     let persona = &situation.personas[grunt.persona_idx];
     let agent = AgentBuilder::new()
         .timeout((&persona.spec.timeout).into())
         .build();
-    let vals = vec![
-        String::from("hi"),
-        String::from("from"),
-        String::from("the"),
-        String::from("thread"),
-    ];
+    let vals = vec![];
 
     barrier.wait();
+
+    let mut current_pipe_contents: Option<PipeContents> = None;
+    let mut current_pipe_idx: usize = 0;
+    let mut goto_counters: HashMap<usize, usize> = HashMap::with_capacity(
+        persona
+            .spec
+            .pipeline
+            .iter()
+            .filter(|step| matches!(step, PipelineAction::GoTo { .. }))
+            .count(),
+    );
+
+    loop {
+        if let Some(step) = &persona.spec.pipeline.get(current_pipe_idx) {
+            match do_step(
+                step,
+                current_pipe_idx,
+                &situation.base_url,
+                persona,
+                &mut lua,
+                &agent,
+                current_pipe_contents.as_ref(),
+                &mut goto_counters,
+            ) {
+                Ok(StepCompletion::Success {
+                    next_index,
+                    pipe_data,
+                }) => {
+                    current_pipe_contents = pipe_data;
+                    current_pipe_idx = next_index;
+                }
+                Ok(StepCompletion::SuccessWithWarnings {
+                    next_index,
+                    pipe_data,
+                }) => {
+                    // TODO: log event for warnings
+                    current_pipe_contents = pipe_data;
+                    current_pipe_idx = next_index;
+                }
+                Err(StepError::Unclassified) => {
+                    eprintln!(
+                        "[{}] aborting due to unclassified error in pipeline",
+                        grunt.name
+                    );
+                    eprintln!(
+                        "[{}] this is an error in seatrial - TODO fix this",
+                        grunt.name
+                    );
+                    eprintln!("[{}] step was: {:?}", grunt.name, step);
+                    break;
+                }
+                Err(StepError::InvalidActionInContext) => {
+                    eprintln!(
+                        "[{}] aborting due to invalid action definition in the given context",
+                        grunt.name
+                    );
+                    eprintln!(
+                        "[{}] that this was not caught in a linter run is an error in seatrial - TODO fix this",
+                        grunt.name
+                    );
+                    eprintln!("[{}] step was: {:?}", grunt.name, step);
+                    break;
+                }
+                Err(StepError::LuaException(err)) => {
+                    eprintln!("[{}] aborting due to lua error", grunt.name);
+                    eprintln!("[{}] err was: {}", grunt.name, err);
+                    eprintln!("[{}] step was: {:?}", grunt.name, step);
+                    break;
+                }
+                Err(StepError::UrlParsing(err)) => {
+                    eprintln!("[{}] aborting due to url parsing error", grunt.name);
+                    eprintln!("[{}] err was: {}", grunt.name, err);
+                    eprintln!("[{}] step was: {:?}", grunt.name, step);
+                    break;
+                }
+                Err(StepError::Http(err)) => {
+                    eprintln!("[{}] aborting due to http error", grunt.name);
+                    eprintln!("[{}] err was: {}", grunt.name, err);
+                    eprintln!("[{}] step was: {:?}", grunt.name, step);
+                    break;
+                }
+            }
+        } else {
+            eprintln!("[{}] reached end of pipeline, goodbye!", grunt.name);
+            break;
+        }
+    }
 
     for val in vals {
         tx.send(val).unwrap();
         thread::sleep(Duration::from_secs(1));
+    }
+}
+
+fn do_step(
+    step: &PipelineAction,
+    idx: usize,
+    base_url: &Url,
+    persona: &Persona,
+    lua: &mut Lua,
+    agent: &Agent,
+    _last: Option<&PipeContents>,
+    goto_counters: &mut HashMap<usize, usize>,
+) -> Result<StepCompletion, StepError> {
+    match step {
+        PipelineAction::GoTo { index, max_times } => {
+            do_step_goto(*index, *max_times, persona, goto_counters)
+        }
+        PipelineAction::LuaTableIndex(..)
+        | PipelineAction::LuaTableValue(..)
+        | PipelineAction::LuaValue => Err(StepError::InvalidActionInContext),
+        PipelineAction::LuaFunction(fname) => do_step_lua_function(idx, fname, lua),
+        PipelineAction::Delete {
+            url,
+            headers,
+            params,
+            timeout,
+        } => do_step_http_delete(
+            idx,
+            base_url,
+            url,
+            headers.as_ref(),
+            params.as_ref(),
+            timeout.as_ref(),
+            agent,
+        ),
+        PipelineAction::Get {
+            url,
+            headers,
+            params,
+            timeout,
+        } => do_step_http_get(
+            idx,
+            base_url,
+            url,
+            headers.as_ref(),
+            params.as_ref(),
+            timeout.as_ref(),
+            agent,
+        ),
+        PipelineAction::Head {
+            url,
+            headers,
+            params,
+            timeout,
+        } => do_step_http_head(
+            idx,
+            base_url,
+            url,
+            headers.as_ref(),
+            params.as_ref(),
+            timeout.as_ref(),
+            agent,
+        ),
+        PipelineAction::Post {
+            url,
+            headers,
+            params,
+            timeout,
+        } => do_step_http_post(
+            idx,
+            base_url,
+            url,
+            headers.as_ref(),
+            params.as_ref(),
+            timeout.as_ref(),
+            agent,
+        ),
+        PipelineAction::Put {
+            url,
+            headers,
+            params,
+            timeout,
+        } => do_step_http_put(
+            idx,
+            base_url,
+            url,
+            headers.as_ref(),
+            params.as_ref(),
+            timeout.as_ref(),
+            agent,
+        ),
+        // TODO: remove
+        _ => Ok(StepCompletion::Success {
+            next_index: idx + 1,
+            pipe_data: None,
+        }),
     }
 }

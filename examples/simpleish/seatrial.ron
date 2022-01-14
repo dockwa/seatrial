@@ -1,4 +1,6 @@
 (
+    lua_file: "seatrial.lua",
+
     grunts: [
         (
             base_name: "Reloader Grunt",
