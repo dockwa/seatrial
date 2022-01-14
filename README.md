@@ -24,7 +24,7 @@ indeed, for helping developers make such scale events, Non-Events).
 
 ## Development and Packaging
 
-> MSRV: 1.57, as specified in `Cargo.toml`
+> MSRV: 1.58, as specified in `Cargo.toml`
 
 ## Legal
 
