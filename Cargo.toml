@@ -6,8 +6,21 @@ rust-version = "1.58"
 
 [dependencies]
 argh = "0.1"
+enum_dispatch = "0.3"
 nanoserde = "0.1"
 rlua = "0.18"
 strfmt = "0.1"
 ureq = "2.4"
 url = "2.2"
+
+[dev-dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+rand = "0.8"
+vial = "0.1"
+
+[patch.crates-io]
+vial = { git = "https://github.com/sigaloid/vial" }
+
+[[example]]
+name = "simpleish"
+path = "examples/simpleish/server.rs"

@@ -15,6 +15,7 @@ mod grunt;
 mod persona;
 mod pipeline;
 mod pipeline_action;
+mod shared_lua;
 mod situation;
 mod step_goto;
 mod step_http;
@@ -23,7 +24,7 @@ mod step_lua;
 use crate::grunt::Grunt;
 use crate::persona::Persona;
 use crate::pipeline::{PipeContents, StepCompletion, StepError};
-use crate::pipeline_action::PipelineAction;
+use crate::pipeline_action::{Combinator, ControlFlow, Http, PipelineAction as PA, Reference, Validator};
 use crate::situation::{Situation, SituationSpec};
 use crate::step_goto::step as do_step_goto;
 use crate::step_http::{
@@ -175,7 +176,7 @@ fn grunt_worker(
             .spec
             .pipeline
             .iter()
-            .filter(|step| matches!(step, PipelineAction::GoTo { .. }))
+            .filter(|step| matches!(step, PA::ControlFlow(ControlFlow::GoTo { .. })))
             .count(),
     );
 
@@ -191,14 +192,18 @@ fn grunt_worker(
                 current_pipe_contents.as_ref(),
                 &mut goto_counters,
             ) {
-                Ok(StepCompletion::Success {
+                Ok(StepCompletion::WithExit) => {
+                    grunt_exit(grunt);
+                    break;
+                }
+                Ok(StepCompletion::Normal {
                     next_index,
                     pipe_data,
                 }) => {
                     current_pipe_contents = pipe_data;
                     current_pipe_idx = next_index;
                 }
-                Ok(StepCompletion::SuccessWithWarnings {
+                Ok(StepCompletion::WithWarnings {
                     next_index,
                     pipe_data,
                 }) => {
@@ -250,7 +255,7 @@ fn grunt_worker(
                 }
             }
         } else {
-            eprintln!("[{}] reached end of pipeline, goodbye!", grunt.name);
+            grunt_exit(grunt);
             break;
         }
     }
@@ -261,96 +266,99 @@ fn grunt_worker(
     }
 }
 
+fn grunt_exit(grunt: &Grunt) {
+    eprintln!("[{}] reached end of pipeline, goodbye!", grunt.name);
+}
+
 fn do_step(
-    step: &PipelineAction,
+    step: &PA,
     idx: usize,
     base_url: &Url,
     persona: &Persona,
     lua: &mut Lua,
     agent: &Agent,
-    _last: Option<&PipeContents>,
+    last: Option<&PipeContents>,
     goto_counters: &mut HashMap<usize, usize>,
 ) -> Result<StepCompletion, StepError> {
     match step {
-        PipelineAction::GoTo { index, max_times } => {
-            do_step_goto(*index, *max_times, persona, goto_counters)
+        PA::ControlFlow(ControlFlow::GoTo { index, max_times }) => {
+            if let Some(times) = max_times {
+                if *times == 0 {
+                    // TODO: should probably warn here, or just outright disallow this (either by a
+                    // bounded integral type rather than usize, or by failing at lint time)
+                    return Ok(StepCompletion::WithExit);
+                }
+
+                match goto_counters.get(index) {
+                    Some(rem) => {
+                        if *rem == 0 {
+                            return Ok(StepCompletion::WithExit);
+                        }
+                    }
+                    None => {
+                        goto_counters.insert(*index, times - 1);
+                    }
+                };
+            }
+
+            do_step_goto(*index, persona)
         }
-        PipelineAction::LuaTableIndex(..)
-        | PipelineAction::LuaTableValue(..)
-        | PipelineAction::LuaValue => Err(StepError::InvalidActionInContext),
-        PipelineAction::LuaFunction(fname) => do_step_lua_function(idx, fname, lua),
-        PipelineAction::Delete {
+        PA::Reference(Reference::LuaTableIndex(..))
+        | PA::Reference(Reference::LuaTableValue(..))
+        | PA::Reference(Reference::LuaValue) => Err(StepError::InvalidActionInContext),
+        PA::LuaFunction(fname) => do_step_lua_function(idx, fname, lua, last),
+        act @ (PA::Http(Http::Delete {
             url,
             headers,
             params,
             timeout,
-        } => do_step_http_delete(
-            idx,
-            base_url,
-            url,
-            headers.as_ref(),
-            params.as_ref(),
-            timeout.as_ref(),
-            agent,
-        ),
-        PipelineAction::Get {
+        })
+        | PA::Http(Http::Get {
             url,
             headers,
             params,
             timeout,
-        } => do_step_http_get(
-            idx,
-            base_url,
-            url,
-            headers.as_ref(),
-            params.as_ref(),
-            timeout.as_ref(),
-            agent,
-        ),
-        PipelineAction::Head {
+        })
+        | PA::Http(Http::Head {
             url,
             headers,
             params,
             timeout,
-        } => do_step_http_head(
-            idx,
-            base_url,
-            url,
-            headers.as_ref(),
-            params.as_ref(),
-            timeout.as_ref(),
-            agent,
-        ),
-        PipelineAction::Post {
+        })
+        | PA::Http(Http::Post {
             url,
             headers,
             params,
             timeout,
-        } => do_step_http_post(
-            idx,
-            base_url,
-            url,
-            headers.as_ref(),
-            params.as_ref(),
-            timeout.as_ref(),
-            agent,
-        ),
-        PipelineAction::Put {
+        })
+        | PA::Http(Http::Put {
             url,
             headers,
             params,
             timeout,
-        } => do_step_http_put(
-            idx,
-            base_url,
-            url,
-            headers.as_ref(),
-            params.as_ref(),
-            timeout.as_ref(),
-            agent,
-        ),
+        })) => {
+            let method = match act {
+                PA::Http(Http::Delete { .. }) => do_step_http_delete,
+                PA::Http(Http::Get { .. }) => do_step_http_get,
+                PA::Http(Http::Head { .. }) => do_step_http_head,
+                PA::Http(Http::Post { .. }) => do_step_http_post,
+                PA::Http(Http::Put { .. }) => do_step_http_put,
+                _ => unreachable!(),
+            };
+
+            method(
+                idx,
+                base_url,
+                url,
+                headers.as_ref(),
+                params.as_ref(),
+                timeout.as_ref(),
+                agent,
+                last,
+            )
+        }
         // TODO: remove
-        _ => Ok(StepCompletion::Success {
+        _ => Ok(StepCompletion::Normal {
             next_index: idx + 1,
             pipe_data: None,
         }),

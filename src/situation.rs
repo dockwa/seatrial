@@ -97,22 +97,18 @@ impl Situation {
         Ok(Self {
             base_url: base_url.clone(),
             lua_file: {
-                // this comical chain attempts to canonicalize a given string, presuming it's a
-                // path to a file. if that fails, it will just pass the given string through to lua
-                // unchanged (perhaps we're requiring a lua library from elsewhere in the search
-                // path, or a native sofile, or whatever). Nones get passed all the way through,
-                // skipping the entire song and dance
+                // this attempts to canonicalize a given string, presuming it's a path to a file.
+                // if that fails, it will just pass the given string through to lua unchanged
+                // (perhaps we're requiring a lua library from elsewhere in the search path, or a
+                // native sofile, or whatever). Nones get passed all the way through, skipping the
+                // entire song and dance
                 spec.contents.lua_file.as_ref().map(|file| {
-                    let rel_path = {
+                    let canon = canonicalize({
                         let mut rel_base = PathBuf::from(&spec.source);
                         rel_base.pop();
                         rel_base.push(file);
                         rel_base
-                    };
-
-                    eprintln!("rel_path: {:?}", rel_path);
-
-                    let canon = canonicalize(rel_path);
+                    });
 
                     if let Ok(path) = canon {
                         path

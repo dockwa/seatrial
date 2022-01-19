@@ -6,16 +6,26 @@ pub enum PipeContents {
     LuaReference(String),
 }
 
+impl PipeContents {
+    pub fn to_lua_string(&self) -> String {
+        match self {
+            PipeContents::HttpResponse(_) => unimplemented!(),
+            PipeContents::LuaReference(lref) => lref.into(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum StepCompletion {
-    Success {
+    Normal {
         next_index: usize,
         pipe_data: Option<PipeContents>,
     },
-    SuccessWithWarnings {
+    WithWarnings {
         next_index: usize,
         pipe_data: Option<PipeContents>,
     },
+    WithExit,
 }
 
 #[derive(Debug)]

@@ -15,19 +15,19 @@
 
             pipeline: [
                 LuaFunction("generate_30_day_range"),
-                Get(
+                Http(Get(
                     url: "/calendar",
                     params: {
                         "start_date": LuaTableValue("start_date"),
                         "end_date": LuaTableValue("end_date"),
                     },
-                ),
-                AllOf([
+                )),
+                Combinator(AllOf([
                     WarnUnlessStatusCodeInRange(200, 299),
                     WarnUnlessHeaderExists("X-Never-Gonna-Give-You-Up"),
                     LuaFunction("was_valid_esoteric_format"),
-                ]),
-                GoTo(index: 0),
+                ])),
+                ControlFlow(GoTo(index: 0)),
             ],
         ),
     },

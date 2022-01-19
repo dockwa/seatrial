@@ -22,6 +22,7 @@ pub fn step_delete(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
+    last: Option<&PipeContents>,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Delete,
@@ -32,6 +33,7 @@ pub fn step_delete(
         params,
         timeout,
         agent,
+        last,
     )
 }
 
@@ -43,6 +45,7 @@ pub fn step_get(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
+    last: Option<&PipeContents>,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Get,
@@ -53,6 +56,7 @@ pub fn step_get(
         params,
         timeout,
         agent,
+        last,
     )
 }
 
@@ -64,6 +68,7 @@ pub fn step_head(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
+    last: Option<&PipeContents>,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Head,
@@ -74,6 +79,7 @@ pub fn step_head(
         params,
         timeout,
         agent,
+        last,
     )
 }
 
@@ -85,6 +91,7 @@ pub fn step_post(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
+    last: Option<&PipeContents>,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Post,
@@ -95,6 +102,7 @@ pub fn step_post(
         params,
         timeout,
         agent,
+        last,
     )
 }
 
@@ -106,6 +114,7 @@ pub fn step_put(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
+    last: Option<&PipeContents>,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Put,
@@ -116,6 +125,7 @@ pub fn step_put(
         params,
         timeout,
         agent,
+        last,
     )
 }
 
@@ -128,13 +138,14 @@ fn step(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
+    last: Option<&PipeContents>,
 ) -> Result<StepCompletion, StepError> {
-    let stringified_path = &path.to_string();
-
     base_url
         .join(path)
         .map_err(StepError::UrlParsing)
         .and_then(|url| {
+            let stringified_path = &url.to_string();
+
             request_common(
                 match verb {
                     Verb::Delete => agent.delete(stringified_path),
@@ -147,6 +158,7 @@ fn step(
                 idx,
                 headers,
                 params,
+                last,
             )
         })
 }
@@ -155,16 +167,25 @@ fn request_common(
     mut req: ureq::Request,
     timeout: Option<&ConfigDuration>,
     idx: usize,
-    _headers: Option<&ConfigActionMap>,
-    _params: Option<&ConfigActionMap>,
+    headers: Option<&ConfigActionMap>,
+    params: Option<&ConfigActionMap>,
+    last: Option<&PipeContents>,
 ) -> Result<StepCompletion, StepError> {
     if let Some(timeout) = timeout {
         req = req.timeout(timeout.into())
     }
+
     req.call()
-        .map(|response| StepCompletion::Success {
+        .map(|response| StepCompletion::Normal {
             next_index: idx + 1,
             pipe_data: Some(PipeContents::HttpResponse(response)),
         })
-        .map_err(StepError::Http)
+        .or_else(|err| {
+            match err {
+                ureq::Error::Status(_, response) => Ok(StepCompletion::Normal {
+                    next_index: idx + 1,
+                    pipe_data: Some(PipeContents::HttpResponse(response)),
+                }),
+                ureq::Error::Transport(_) => Err(StepError::Http(err)),
+        }})
 }
