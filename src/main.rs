@@ -155,13 +155,12 @@ fn grunt_worker(
 
             // TODO: something cleaner than unwrap() here
             lua.context(|ctx| {
-                ctx
-                    .load(&format!(
-                        "package.path = package.path .. \";{}\"; _user_script = require('{}')",
-                        fpath, fname
-                    ))
-                    .set_name(&format!("user_script<{}, {}>", grunt.name, fpath))?
-                    .exec()?;
+                ctx.load(&format!(
+                    "package.path = package.path .. \";{}\"; _user_script = require('{}')",
+                    fpath, fname
+                ))
+                .set_name(&format!("user_script<{}, {}>", grunt.name, fpath))?
+                .exec()?;
 
                 let user_script = ctx.globals().get::<_, rlua::Table>("_user_script")?;
 
@@ -281,7 +280,10 @@ fn grunt_worker(
                     break;
                 }
                 Err(StepError::RefuseToStringifyComplexLuaValue) => {
-                    eprintln!("[{}] aborting attempt to stringify complex lua value", grunt.name);
+                    eprintln!(
+                        "[{}] aborting attempt to stringify complex lua value",
+                        grunt.name
+                    );
                     eprintln!("[{}] step was: {:?}", grunt.name, step);
                     break;
                 }
@@ -289,7 +291,10 @@ fn grunt_worker(
                 // into the keyboard screaming obscenities if a tool offered me this as the sole
                 // debug output
                 Err(StepError::RequestedLuaValueWhereNoneExists) => {
-                    eprintln!("[{}] aborting attempt to pass non-existent value to lua context", grunt.name);
+                    eprintln!(
+                        "[{}] aborting attempt to pass non-existent value to lua context",
+                        grunt.name
+                    );
                     eprintln!("[{}] step was: {:?}", grunt.name, step);
                     break;
                 }

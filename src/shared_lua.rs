@@ -15,7 +15,9 @@ pub fn try_stringify_lua_value(it: Result<LuaValue, LuaError>) -> Result<String,
             | LuaValue::UserData(..)
             | LuaValue::LightUserData(..),
         ) => Err(StepError::RefuseToStringifyComplexLuaValue),
-        Ok(LuaValue::Thread { .. } | LuaValue::Error {..}) => Err(StepError::RefuseToStringifyComplexLuaValue),
+        Ok(LuaValue::Thread { .. } | LuaValue::Error { .. }) => {
+            Err(StepError::RefuseToStringifyComplexLuaValue)
+        }
         Err(err) => Err(err.into()),
     }
 }

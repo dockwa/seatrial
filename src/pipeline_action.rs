@@ -82,7 +82,11 @@ pub enum Reference {
 }
 
 impl Reference {
-    pub fn try_into_string_given_pipe_data(&self, lua: &Lua, pipe_data: Option<&PC>) -> Result<String, StepError> {
+    pub fn try_into_string_given_pipe_data(
+        &self,
+        lua: &Lua,
+        pipe_data: Option<&PC>,
+    ) -> Result<String, StepError> {
         match self {
             Reference::Value(it) => Ok(it.clone()),
             Reference::LuaValue => match pipe_data {
@@ -106,7 +110,9 @@ impl Reference {
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
                 Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
-                    try_stringify_lua_value(ctx.registry_value::<rlua::Table>(rkey)?.get(key.clone()))
+                    try_stringify_lua_value(
+                        ctx.registry_value::<rlua::Table>(rkey)?.get(key.clone()),
+                    )
                 }),
             },
         }

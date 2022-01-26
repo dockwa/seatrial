@@ -226,7 +226,10 @@ fn build_request_hashmap(
         let mut ret = HashMap::with_capacity(base.len());
 
         for (key, href) in base {
-            ret.insert(key.clone(), href.try_into_string_given_pipe_data(lua, pipe_data)?);
+            ret.insert(
+                key.clone(),
+                href.try_into_string_given_pipe_data(lua, pipe_data)?,
+            );
         }
 
         Ok(ret)
