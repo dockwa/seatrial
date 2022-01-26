@@ -1,9 +1,14 @@
-use ureq::Agent;
+use rlua::Lua;
+use ureq::{Agent, Request};
 use url::Url;
 
+use std::collections::HashMap;
+
 use crate::config_duration::ConfigDuration;
-use crate::pipeline::{PipeContents, StepCompletion, StepError};
+use crate::pipe_contents::PipeContents as PC;
+use crate::pipeline::StepCompletion;
 use crate::pipeline_action::ConfigActionMap;
+use crate::step_error::StepError;
 
 #[derive(Debug)]
 enum Verb {
@@ -22,7 +27,8 @@ pub fn step_delete(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
-    last: Option<&PipeContents>,
+    last: Option<&PC>,
+    lua: &Lua,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Delete,
@@ -34,6 +40,7 @@ pub fn step_delete(
         timeout,
         agent,
         last,
+        lua,
     )
 }
 
@@ -45,7 +52,8 @@ pub fn step_get(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
-    last: Option<&PipeContents>,
+    last: Option<&PC>,
+    lua: &Lua,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Get,
@@ -57,6 +65,7 @@ pub fn step_get(
         timeout,
         agent,
         last,
+        lua,
     )
 }
 
@@ -68,7 +77,8 @@ pub fn step_head(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
-    last: Option<&PipeContents>,
+    last: Option<&PC>,
+    lua: &Lua,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Head,
@@ -80,6 +90,7 @@ pub fn step_head(
         timeout,
         agent,
         last,
+        lua,
     )
 }
 
@@ -91,7 +102,8 @@ pub fn step_post(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
-    last: Option<&PipeContents>,
+    last: Option<&PC>,
+    lua: &Lua,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Post,
@@ -103,6 +115,7 @@ pub fn step_post(
         timeout,
         agent,
         last,
+        lua,
     )
 }
 
@@ -114,7 +127,8 @@ pub fn step_put(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
-    last: Option<&PipeContents>,
+    last: Option<&PC>,
+    lua: &Lua,
 ) -> Result<StepCompletion, StepError> {
     step(
         Verb::Put,
@@ -126,6 +140,7 @@ pub fn step_put(
         timeout,
         agent,
         last,
+        lua,
     )
 }
 
@@ -138,7 +153,8 @@ fn step(
     params: Option<&ConfigActionMap>,
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
-    last: Option<&PipeContents>,
+    last: Option<&PC>,
+    lua: &Lua,
 ) -> Result<StepCompletion, StepError> {
     base_url
         .join(path)
@@ -159,33 +175,62 @@ fn step(
                 headers,
                 params,
                 last,
+                lua,
             )
         })
 }
 
 fn request_common(
-    mut req: ureq::Request,
+    mut req: Request,
     timeout: Option<&ConfigDuration>,
     idx: usize,
     headers: Option<&ConfigActionMap>,
     params: Option<&ConfigActionMap>,
-    last: Option<&PipeContents>,
+    last: Option<&PC>,
+    lua: &Lua,
 ) -> Result<StepCompletion, StepError> {
     if let Some(timeout) = timeout {
         req = req.timeout(timeout.into())
     }
 
+    for (key, val) in build_request_hashmap(headers, lua, last)? {
+        req = req.set(&key, &val);
+    }
+
+    for (key, val) in build_request_hashmap(params, lua, last)? {
+        req = req.query(&key, &val);
+    }
+
     req.call()
-        .map(|response| StepCompletion::Normal {
-            next_index: idx + 1,
-            pipe_data: Some(PipeContents::HttpResponse(response)),
+        .and_then(|response| {
+            Ok(StepCompletion::Normal {
+                next_index: idx + 1,
+                pipe_data: Some(response.try_into()?),
+            })
         })
-        .or_else(|err| {
-            match err {
-                ureq::Error::Status(_, response) => Ok(StepCompletion::Normal {
-                    next_index: idx + 1,
-                    pipe_data: Some(PipeContents::HttpResponse(response)),
-                }),
-                ureq::Error::Transport(_) => Err(StepError::Http(err)),
-        }})
+        .or_else(|err| match err {
+            ureq::Error::Status(_, response) => Ok(StepCompletion::Normal {
+                next_index: idx + 1,
+                pipe_data: Some(response.try_into()?),
+            }),
+            ureq::Error::Transport(_) => Err(StepError::Http(err)),
+        })
+}
+
+fn build_request_hashmap(
+    base_spec: Option<&ConfigActionMap>,
+    lua: &Lua,
+    pipe_data: Option<&PC>,
+) -> Result<HashMap<String, String>, StepError> {
+    if let Some(base) = base_spec {
+        let mut ret = HashMap::with_capacity(base.len());
+
+        for (key, href) in base {
+            ret.insert(key.clone(), href.try_into_string_given_pipe_data(lua, pipe_data)?);
+        }
+
+        Ok(ret)
+    } else {
+        Ok(HashMap::new())
+    }
 }

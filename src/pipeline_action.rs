@@ -1,9 +1,13 @@
 use enum_dispatch::enum_dispatch;
 use nanoserde::DeRon;
+use rlua::Lua;
 
 use std::collections::HashMap;
 
 use crate::config_duration::ConfigDuration;
+use crate::pipe_contents::PipeContents as PC;
+use crate::shared_lua::try_stringify_lua_value;
+use crate::step_error::StepError;
 
 pub type ConfigActionMap = HashMap<String, Reference>;
 
@@ -75,6 +79,38 @@ pub enum Reference {
     LuaValue,
     LuaTableIndex(usize),
     LuaTableValue(String),
+}
+
+impl Reference {
+    pub fn try_into_string_given_pipe_data(&self, lua: &Lua, pipe_data: Option<&PC>) -> Result<String, StepError> {
+        match self {
+            Reference::Value(it) => Ok(it.clone()),
+            Reference::LuaValue => match pipe_data {
+                None => Err(StepError::RequestedLuaValueWhereNoneExists),
+                // TODO: as with Unclassified itself, change this
+                Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
+                Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
+                    try_stringify_lua_value(ctx.registry_value::<rlua::Value>(&rkey))
+                }),
+            },
+            Reference::LuaTableIndex(idx) => match pipe_data {
+                None => Err(StepError::RequestedLuaValueWhereNoneExists),
+                // TODO: as with Unclassified itself, change this
+                Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
+                Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
+                    try_stringify_lua_value(ctx.registry_value::<rlua::Table>(&rkey)?.get(*idx))
+                }),
+            },
+            Reference::LuaTableValue(key) => match pipe_data {
+                None => Err(StepError::RequestedLuaValueWhereNoneExists),
+                // TODO: as with Unclassified itself, change this
+                Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
+                Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
+                    try_stringify_lua_value(ctx.registry_value::<rlua::Table>(&rkey)?.get(key.clone()))
+                }),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, DeRon)]

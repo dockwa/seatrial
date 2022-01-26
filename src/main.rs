@@ -1,5 +1,5 @@
 use argh::FromArgs;
-use rlua::Lua;
+use rlua::{Lua, RegistryKey};
 use ureq::{Agent, AgentBuilder};
 use url::Url;
 
@@ -12,20 +12,25 @@ use std::time::Duration;
 
 mod config_duration;
 mod grunt;
+mod http_response_table;
 mod persona;
+mod pipe_contents;
 mod pipeline;
 mod pipeline_action;
 mod shared_lua;
 mod situation;
+mod step_error;
 mod step_goto;
 mod step_http;
 mod step_lua;
 
 use crate::grunt::Grunt;
 use crate::persona::Persona;
-use crate::pipeline::{PipeContents, StepCompletion, StepError};
-use crate::pipeline_action::{Combinator, ControlFlow, Http, PipelineAction as PA, Reference, Validator};
+use crate::pipe_contents::PipeContents;
+use crate::pipeline::StepCompletion;
+use crate::pipeline_action::{ControlFlow, Http, PipelineAction as PA, Reference};
 use crate::situation::{Situation, SituationSpec};
+use crate::step_error::StepError;
 use crate::step_goto::step as do_step_goto;
 use crate::step_http::{
     step_delete as do_step_http_delete, step_get as do_step_http_get,
@@ -130,39 +135,54 @@ fn grunt_worker(
     grunt: &Grunt,
     tx: mpsc::Sender<String>,
 ) {
-    let mut lua = Lua::new();
+    let lua = Lua::new();
 
-    if let Some(file) = situation.lua_file.as_ref() {
-        let fpath = if let Some(parent) = file.parent() {
-            let mut ret = parent.to_path_buf();
-            ret.push("?.lua");
-            ret.to_string_lossy().into_owned()
-        } else {
-            file.to_string_lossy().into_owned()
-        };
-        let fname = file
-            .file_stem()
-            .unwrap_or_else(|| file.as_os_str())
-            .to_string_lossy();
+    let user_script_registry_key = situation
+        .lua_file
+        .as_ref()
+        .map(|file| {
+            let fpath = if let Some(parent) = file.parent() {
+                let mut ret = parent.to_path_buf();
+                ret.push("?.lua");
+                ret.to_string_lossy().into_owned()
+            } else {
+                file.to_string_lossy().into_owned()
+            };
+            let fname = file
+                .file_stem()
+                .unwrap_or_else(|| file.as_os_str())
+                .to_string_lossy();
 
-        // TODO: something cleaner than unwrap() here
-        lua.context(|ctx| {
-            ctx.load(&format!(
-                "package.path = package.path .. \";{}\"; user_script = require('{}')",
-                fpath, fname
-            ))
-            .set_name(&format!("user_script<{}, {}>", grunt.name, fpath))?
-            .exec()
+            // TODO: something cleaner than unwrap() here
+            lua.context(|ctx| {
+                ctx
+                    .load(&format!(
+                        "package.path = package.path .. \";{}\"; _user_script = require('{}')",
+                        fpath, fname
+                    ))
+                    .set_name(&format!("user_script<{}, {}>", grunt.name, fpath))?
+                    .exec()?;
+
+                let user_script = ctx.globals().get::<_, rlua::Table>("_user_script")?;
+
+                Ok(ctx
+                    .create_registry_value(user_script)
+                    .expect("should have stored user script in registry"))
+            })
+            .unwrap_or_else(|err: rlua::Error| {
+                eprintln!("[{}] aborting due to lua error", grunt.name);
+                eprintln!("[{}] err was: {}", grunt.name, err);
+                panic!();
+            })
         })
-        .unwrap_or_else(|err| {
-            eprintln!("[{}] aborting due to lua error", grunt.name);
-            eprintln!("[{}] err was: {}", grunt.name, err);
-            panic!();
-        });
-    }
+        .unwrap(); // TODO: remove and handle non-extant case
 
     let persona = &situation.personas[grunt.persona_idx];
     let agent = AgentBuilder::new()
+        .user_agent(&format!(
+            "seatrial/grunt={}/persona={}",
+            grunt.name, persona.name
+        ))
         .timeout((&persona.spec.timeout).into())
         .build();
     let vals = vec![];
@@ -187,7 +207,8 @@ fn grunt_worker(
                 current_pipe_idx,
                 &situation.base_url,
                 persona,
-                &mut lua,
+                &lua,
+                &user_script_registry_key,
                 &agent,
                 current_pipe_contents.as_ref(),
                 &mut goto_counters,
@@ -235,6 +256,12 @@ fn grunt_worker(
                     eprintln!("[{}] step was: {:?}", grunt.name, step);
                     break;
                 }
+                Err(StepError::IO(err)) => {
+                    eprintln!("[{}] aborting due to internal IO error", grunt.name);
+                    eprintln!("[{}] err was: {}", grunt.name, err);
+                    eprintln!("[{}] step was: {:?}", grunt.name, step);
+                    break;
+                }
                 Err(StepError::LuaException(err)) => {
                     eprintln!("[{}] aborting due to lua error", grunt.name);
                     eprintln!("[{}] err was: {}", grunt.name, err);
@@ -250,6 +277,19 @@ fn grunt_worker(
                 Err(StepError::Http(err)) => {
                     eprintln!("[{}] aborting due to http error", grunt.name);
                     eprintln!("[{}] err was: {}", grunt.name, err);
+                    eprintln!("[{}] step was: {:?}", grunt.name, step);
+                    break;
+                }
+                Err(StepError::RefuseToStringifyComplexLuaValue) => {
+                    eprintln!("[{}] aborting attempt to stringify complex lua value", grunt.name);
+                    eprintln!("[{}] step was: {:?}", grunt.name, step);
+                    break;
+                }
+                // TODO: FIXME this messaging is extremely hard to grok, I'd be pounding my head
+                // into the keyboard screaming obscenities if a tool offered me this as the sole
+                // debug output
+                Err(StepError::RequestedLuaValueWhereNoneExists) => {
+                    eprintln!("[{}] aborting attempt to pass non-existent value to lua context", grunt.name);
                     eprintln!("[{}] step was: {:?}", grunt.name, step);
                     break;
                 }
@@ -270,12 +310,16 @@ fn grunt_exit(grunt: &Grunt) {
     eprintln!("[{}] reached end of pipeline, goodbye!", grunt.name);
 }
 
-fn do_step(
+fn do_step<'a>(
     step: &PA,
     idx: usize,
     base_url: &Url,
     persona: &Persona,
-    lua: &mut Lua,
+
+    // TODO: merge into a combo struct
+    lua: &'a Lua,
+    user_script_registry_key: &'a RegistryKey,
+
     agent: &Agent,
     last: Option<&PipeContents>,
     goto_counters: &mut HashMap<usize, usize>,
@@ -306,7 +350,9 @@ fn do_step(
         PA::Reference(Reference::LuaTableIndex(..))
         | PA::Reference(Reference::LuaTableValue(..))
         | PA::Reference(Reference::LuaValue) => Err(StepError::InvalidActionInContext),
-        PA::LuaFunction(fname) => do_step_lua_function(idx, fname, lua, last),
+        PA::LuaFunction(fname) => {
+            do_step_lua_function(idx, fname, lua, user_script_registry_key, last)
+        }
         act @ (PA::Http(Http::Delete {
             url,
             headers,
@@ -355,6 +401,7 @@ fn do_step(
                 timeout.as_ref(),
                 agent,
                 last,
+                lua,
             )
         }
         // TODO: remove

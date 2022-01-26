@@ -77,7 +77,7 @@ fn calendar(req: Request) -> Result<String, CalendarError> {
 
     // some contrived esoteric format just designed to give the LuaFunction validator something
     // worth doing
-    Ok(format!(
+    let response = format!(
         "DAYS {} SYEAR {} EYEAR {} SMON {} EMON {} SDAY {} EDAY {}",
         diff.num_days(),
         start_date.year(),
@@ -86,7 +86,11 @@ fn calendar(req: Request) -> Result<String, CalendarError> {
         end_date.month(),
         start_date.day(),
         end_date.day(),
-    ))
+    );
+
+    eprintln!("debug: {}", response);
+
+    Ok(response)
 }
 
 fn main() {
