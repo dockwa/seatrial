@@ -348,9 +348,10 @@ fn do_step<'a>(
                         goto_counters.insert(*index, *times);
                     }
                 };
+
+                goto_counters.insert(*index, goto_counters.get(index).unwrap() - 1);
             }
 
-            goto_counters.insert(*index, goto_counters.get(index).unwrap() - 1);
             do_step_goto(*index, persona)
         }
         PA::Reference(Reference::LuaTableIndex(..))

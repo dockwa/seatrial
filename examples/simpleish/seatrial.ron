@@ -27,7 +27,7 @@
                     WarnUnlessHeaderExists("X-Never-Gonna-Give-You-Up"),
                     LuaFunction("was_valid_esoteric_format"),
                 ])),
-                ControlFlow(GoTo(index: 0)),
+                ControlFlow(GoTo(index: 0, max_times: 2)),
             ],
         ),
     },
