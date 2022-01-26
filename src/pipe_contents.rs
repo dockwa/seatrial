@@ -46,9 +46,7 @@ impl TryFrom<ureq::Response> for PipeContents {
                 let mut headers = HashMap::with_capacity(headers_names.len());
 
                 for header_name in headers_names {
-                    let header = res.header(&header_name);
-
-                    if let Some(header_val) = header {
+                    if let Some(header_val) = res.header(&header_name) {
                         headers.insert(header_name, header_val.into());
                     }
                 }
