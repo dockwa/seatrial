@@ -345,11 +345,12 @@ fn do_step<'a>(
                         }
                     }
                     None => {
-                        goto_counters.insert(*index, times - 1);
+                        goto_counters.insert(*index, *times);
                     }
                 };
             }
 
+            goto_counters.insert(*index, goto_counters.get(index).unwrap() - 1);
             do_step_goto(*index, persona)
         }
         PA::Reference(Reference::LuaTableIndex(..))
