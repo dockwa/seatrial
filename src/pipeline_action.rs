@@ -90,7 +90,7 @@ impl Reference {
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
                 Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
-                    try_stringify_lua_value(ctx.registry_value::<rlua::Value>(&rkey))
+                    try_stringify_lua_value(ctx.registry_value::<rlua::Value>(rkey))
                 }),
             },
             Reference::LuaTableIndex(idx) => match pipe_data {
@@ -98,7 +98,7 @@ impl Reference {
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
                 Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
-                    try_stringify_lua_value(ctx.registry_value::<rlua::Table>(&rkey)?.get(*idx))
+                    try_stringify_lua_value(ctx.registry_value::<rlua::Table>(rkey)?.get(*idx))
                 }),
             },
             Reference::LuaTableValue(key) => match pipe_data {
@@ -106,7 +106,7 @@ impl Reference {
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
                 Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
-                    try_stringify_lua_value(ctx.registry_value::<rlua::Table>(&rkey)?.get(key.clone()))
+                    try_stringify_lua_value(ctx.registry_value::<rlua::Table>(rkey)?.get(key.clone()))
                 }),
             },
         }
