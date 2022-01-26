@@ -8,6 +8,12 @@ pub enum ConfigDuration {
     Seconds(u64),
 }
 
+impl From<ConfigDuration> for Duration {
+    fn from(src: ConfigDuration) -> Self {
+        (&src).into()
+    }
+}
+
 impl From<&ConfigDuration> for Duration {
     fn from(src: &ConfigDuration) -> Self {
         match src {
@@ -15,4 +21,17 @@ impl From<&ConfigDuration> for Duration {
             ConfigDuration::Seconds(ms) => Duration::from_secs(*ms),
         }
     }
+}
+
+#[test]
+fn test_seconds() {
+    assert_eq!(Duration::from_secs(10), ConfigDuration::Seconds(10).into());
+}
+
+#[test]
+fn test_milliseconds() {
+    assert_eq!(
+        Duration::from_millis(100),
+        ConfigDuration::Milliseconds(100).into()
+    );
 }

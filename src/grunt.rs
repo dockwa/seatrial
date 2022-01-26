@@ -31,3 +31,36 @@ impl GruntSpec {
         self.count.unwrap_or(1)
     }
 }
+
+#[test]
+fn test_formatted_name() {
+    let spec = GruntSpec {
+        base_name: Some("Jimbo Gruntseph".into()),
+        persona: "blahblah".into(),
+        count: None,
+    };
+
+    assert_eq!("Jimbo Gruntseph 1", spec.formatted_name(1));
+}
+
+#[test]
+fn test_formatted_name_no_base() {
+    let spec = GruntSpec {
+        base_name: None,
+        persona: "blahblah".into(),
+        count: None,
+    };
+
+    assert_eq!("Grunt<blahblah> 1", spec.formatted_name(1));
+}
+
+#[test]
+fn test_real_count() {
+    let spec = GruntSpec {
+        base_name: None,
+        persona: "blahblah".into(),
+        count: None,
+    };
+
+    assert_eq!(1, spec.real_count());
+}
