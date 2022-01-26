@@ -1,4 +1,3 @@
-use enum_dispatch::enum_dispatch;
 use nanoserde::DeRon;
 use rlua::Lua;
 
@@ -135,13 +134,12 @@ pub enum Validator {
     LuaFunction(String),
 }
 
-#[enum_dispatch]
 #[derive(Clone, Debug, DeRon)]
 pub enum PipelineAction {
-    Combinator,
-    ControlFlow,
-    Http,
+    Combinator(Combinator),
+    ControlFlow(ControlFlow),
+    Http(Http),
     LuaFunction(String),
-    Reference,
-    Validator,
+    Reference(Reference),
+    Validator(Validator),
 }

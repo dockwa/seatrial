@@ -1,4 +1,5 @@
 use rlua::{Lua, RegistryKey, Value as LuaValue};
+use ureq::Response;
 
 use std::collections::HashMap;
 use std::io::{Error as IOError, Read, Result as IOResult};
@@ -34,10 +35,10 @@ impl PipeContents {
     }
 }
 
-impl TryFrom<ureq::Response> for PipeContents {
+impl TryFrom<Response> for PipeContents {
     type Error = IOError;
 
-    fn try_from(res: ureq::Response) -> IOResult<Self> {
+    fn try_from(res: Response) -> IOResult<Self> {
         Ok(Self::HttpResponse {
             content_type: res.content_type().into(),
             status_code: res.status(),
