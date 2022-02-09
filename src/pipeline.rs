@@ -9,6 +9,8 @@ pub enum StepCompletion {
     WithWarnings {
         next_index: usize,
         pipe_data: Option<PipeContents>,
+        // TODO should this be a stronger type than just a string?
+        warnings: Vec<String>,
     },
     WithExit,
 }

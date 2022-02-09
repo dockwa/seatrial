@@ -8,7 +8,7 @@ use crate::config_duration::ConfigDuration;
 use crate::pipe_contents::PipeContents as PC;
 use crate::pipeline::StepCompletion;
 use crate::pipeline_action::ConfigActionMap;
-use crate::step_error::StepError;
+use crate::step_error::{StepError, StepResult};
 
 #[derive(Debug)]
 enum Verb {
@@ -29,7 +29,7 @@ pub fn step_delete(
     agent: &Agent,
     last: Option<&PC>,
     lua: &Lua,
-) -> Result<StepCompletion, StepError> {
+) -> StepResult {
     step(
         Verb::Delete,
         idx,
@@ -54,7 +54,7 @@ pub fn step_get(
     agent: &Agent,
     last: Option<&PC>,
     lua: &Lua,
-) -> Result<StepCompletion, StepError> {
+) -> StepResult {
     step(
         Verb::Get,
         idx,
@@ -79,7 +79,7 @@ pub fn step_head(
     agent: &Agent,
     last: Option<&PC>,
     lua: &Lua,
-) -> Result<StepCompletion, StepError> {
+) -> StepResult {
     step(
         Verb::Head,
         idx,
@@ -104,7 +104,7 @@ pub fn step_post(
     agent: &Agent,
     last: Option<&PC>,
     lua: &Lua,
-) -> Result<StepCompletion, StepError> {
+) -> StepResult {
     step(
         Verb::Post,
         idx,
@@ -129,7 +129,7 @@ pub fn step_put(
     agent: &Agent,
     last: Option<&PC>,
     lua: &Lua,
-) -> Result<StepCompletion, StepError> {
+) -> StepResult {
     step(
         Verb::Put,
         idx,
@@ -155,7 +155,7 @@ fn step(
     agent: &Agent,
     last: Option<&PC>,
     lua: &Lua,
-) -> Result<StepCompletion, StepError> {
+) -> StepResult {
     base_url
         .join(path)
         .map_err(StepError::UrlParsing)
@@ -188,7 +188,7 @@ fn request_common(
     params: Option<&ConfigActionMap>,
     last: Option<&PC>,
     lua: &Lua,
-) -> Result<StepCompletion, StepError> {
+) -> StepResult {
     if let Some(timeout) = timeout {
         req = req.timeout(timeout.into())
     }

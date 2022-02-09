@@ -2,6 +2,10 @@ use rlua::Error as LuaError;
 
 use std::io::Error as IOError;
 
+use crate::pipeline::StepCompletion;
+
+pub type StepResult = Result<StepCompletion, StepError>;
+
 #[derive(Debug)]
 pub enum StepError {
     Http(ureq::Error),
@@ -15,6 +19,9 @@ pub enum StepError {
     Unclassified,
 
     UrlParsing(url::ParseError),
+
+    Validation(String),
+    ValidationSucceededUnexpectedly,
 }
 
 impl From<IOError> for StepError {
