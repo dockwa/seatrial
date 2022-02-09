@@ -18,13 +18,42 @@ indeed, for helping developers make such scale events, Non-Events).
 
 ## Usage
 
-- fill
-- this
-- in
+> For further detail and commentary, see `man 1 seatrial`, or
+> `manual/seatrial.1.scd` in the source tree. While you're at it, there's also the
+> following other manual pages, accessible via the same pattern:
+>
+> - `seatrial(5)`
+> - `seatrial.lua(3)`
+
+```
+Usage: seatrial <base_url> <req_situation> [<situations...>] [-m <multiplier>]
+
+situational-mock-based load testing
+
+Positional Arguments:
+  base_url          base URL for all situations in this run
+  req_situation     path to a RON file in seatrial(5) situation config format
+  situations        optional paths to additional RON files in seatrial(5)
+                    situation config format
+
+Options:
+  -m, --multiplier  integral multiplier for grunt counts (minimum 1)
+  --help            display usage information
+```
 
 ## Development and Packaging
 
-> MSRV: 1.58, as specified in `Cargo.toml`
+Minimum Supported Rust Version is 1.58, as specified in `Cargo.toml`.
+Compilation requires nothing particularly special on the host OS beyond a
+standard Rust compiler stack; see `Dockerfile` for an example build.
+Documentation is in [scdoc
+format](https://git.sr.ht/~sircmpwn/scdoc/tree/master/item/scdoc.5.scd), and
+should be compiled to roff by packagers (if you further process the roff into
+HTML or GNU Info or whatever, cool, but at least ship the manual pages).
+
+The source must pass `rustfmt` and `clippy` without errors. It _should_ also
+pass without warnings, unless there's good reason to leave the warnings in
+place.
 
 ## Legal
 
