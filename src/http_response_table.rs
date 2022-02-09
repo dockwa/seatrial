@@ -99,6 +99,27 @@ impl<'a> Iterator for BoundHttpResponseTableIter<'a> {
                         .expect("should have created headers table in registry")
                 }),
             )),
+            3 => Some((
+                "content_type",
+                self.child.lua.context(|ctx| {
+                    ctx.create_registry_value(self.child.table.content_type.clone())
+                        .expect("should have created content_type string in registry")
+                }),
+            )),
+            4 => Some((
+                "body",
+                self.child.lua.context(|ctx| {
+                    ctx.create_registry_value(self.child.table.body.clone())
+                        .expect("should have created body table in registry")
+                }),
+            )),
+            5 => Some((
+                "body_string",
+                self.child.lua.context(|ctx| {
+                    ctx.create_registry_value(self.child.table.body_string.clone())
+                        .expect("should have created body_string nilable-string in registry")
+                }),
+            )),
             _ => None,
         }
     }
