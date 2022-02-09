@@ -124,9 +124,11 @@ pub enum Validator {
     // falsey, except in the context of an AnyOf or NoneOf combinator, which can "catch" the errors
     // as appropriate. WarnUnless validations are never fatal and likewise can never fail a
     // combinator
+    AssertHeaderEquals(String, String),
     AssertHeaderExists(String),
     AssertStatusCode(u16),
     AssertStatusCodeInRange(u16, u16),
+    WarnUnlessHeaderEquals(String, String),
     WarnUnlessHeaderExists(String),
     WarnUnlessStatusCode(u16),
     WarnUnlessStatusCodeInRange(u16, u16),

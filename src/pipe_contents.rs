@@ -8,7 +8,7 @@ use std::rc::Rc;
 use crate::http_response_table::HttpResponseTable;
 use crate::step_error::StepError;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum PipeContents {
     HttpResponse {
         body: Vec<u8>,
