@@ -12,7 +12,7 @@ function generate_30_day_range()
 	}
 end
 
-function was_valid_esoteric_format(arg)
+function is_valid_esoteric_format(arg)
 	if arg.body_string:match(ESOTERIC_FORMAT_REGEX) == nil then
 		return ValidationResult.Error("server responded with malformed body")
 	end
@@ -22,5 +22,5 @@ end
 
 return {
 	generate_30_day_range = generate_30_day_range,
-	was_valid_esoteric_format = was_valid_esoteric_format,
+	is_valid_esoteric_format = is_valid_esoteric_format,
 }
