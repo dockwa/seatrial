@@ -1,4 +1,3 @@
-use rlua::Lua;
 use ureq::{Agent, Request};
 use url::Url;
 
@@ -8,6 +7,7 @@ use crate::config_duration::ConfigDuration;
 use crate::pipe_contents::PipeContents as PC;
 use crate::pipeline::StepCompletion;
 use crate::pipeline_action::ConfigActionMap;
+use crate::lua::LuaForPipeline;
 use crate::step_error::{StepError, StepResult};
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub fn step_delete(
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
     last: Option<&PC>,
-    lua: &Lua,
+    lua: &LuaForPipeline,
 ) -> StepResult {
     step(
         Verb::Delete,
@@ -53,7 +53,7 @@ pub fn step_get(
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
     last: Option<&PC>,
-    lua: &Lua,
+    lua: &LuaForPipeline,
 ) -> StepResult {
     step(
         Verb::Get,
@@ -78,7 +78,7 @@ pub fn step_head(
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
     last: Option<&PC>,
-    lua: &Lua,
+    lua: &LuaForPipeline,
 ) -> StepResult {
     step(
         Verb::Head,
@@ -103,7 +103,7 @@ pub fn step_post(
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
     last: Option<&PC>,
-    lua: &Lua,
+    lua: &LuaForPipeline,
 ) -> StepResult {
     step(
         Verb::Post,
@@ -128,7 +128,7 @@ pub fn step_put(
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
     last: Option<&PC>,
-    lua: &Lua,
+    lua: &LuaForPipeline,
 ) -> StepResult {
     step(
         Verb::Put,
@@ -154,7 +154,7 @@ fn step(
     timeout: Option<&ConfigDuration>,
     agent: &Agent,
     last: Option<&PC>,
-    lua: &Lua,
+    lua: &LuaForPipeline,
 ) -> StepResult {
     base_url
         .join(path)
@@ -187,7 +187,7 @@ fn request_common(
     headers: Option<&ConfigActionMap>,
     params: Option<&ConfigActionMap>,
     last: Option<&PC>,
-    lua: &Lua,
+    lua: &LuaForPipeline,
 ) -> StepResult {
     if let Some(timeout) = timeout {
         req = req.timeout(timeout.into())
@@ -219,7 +219,7 @@ fn request_common(
 
 fn build_request_hashmap(
     base_spec: Option<&ConfigActionMap>,
-    lua: &Lua,
+    lua: &LuaForPipeline,
     pipe_data: Option<&PC>,
 ) -> Result<HashMap<String, String>, StepError> {
     if let Some(base) = base_spec {
@@ -228,7 +228,8 @@ fn build_request_hashmap(
         for (key, href) in base {
             ret.insert(
                 key.clone(),
-                href.try_into_string_given_pipe_data(lua, pipe_data)?,
+                // TODO: is there a cleaner way to do this than reaching into LuaForPipeline?
+                href.try_into_string_given_pipe_data(&lua.lua, pipe_data)?,
             );
         }
 

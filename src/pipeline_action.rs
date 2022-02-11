@@ -1,11 +1,10 @@
 use nanoserde::DeRon;
-use rlua::Lua;
+use rlua::{Error as LuaError, Lua, Value as LuaValue};
 
 use std::collections::HashMap;
 
 use crate::config_duration::ConfigDuration;
 use crate::pipe_contents::PipeContents as PC;
-use crate::shared_lua::try_stringify_lua_value;
 use crate::step_error::StepError;
 
 pub type ConfigActionMap = HashMap<String, Reference>;
@@ -93,7 +92,7 @@ impl Reference {
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
                 Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
-                    try_stringify_lua_value(ctx.registry_value::<rlua::Value>(rkey))
+                    self.try_stringify_potential_lua_value(ctx.registry_value::<rlua::Value>(rkey))
                 }),
             },
             Reference::LuaTableIndex(idx) => match pipe_data {
@@ -101,7 +100,9 @@ impl Reference {
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
                 Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
-                    try_stringify_lua_value(ctx.registry_value::<rlua::Table>(rkey)?.get(*idx))
+                    self.try_stringify_potential_lua_value(
+                        ctx.registry_value::<rlua::Table>(rkey)?.get(*idx),
+                    )
                 }),
             },
             Reference::LuaTableValue(key) => match pipe_data {
@@ -109,11 +110,34 @@ impl Reference {
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
                 Some(PC::LuaReference(rkey)) => lua.context(|ctx| {
-                    try_stringify_lua_value(
+                    self.try_stringify_potential_lua_value(
                         ctx.registry_value::<rlua::Table>(rkey)?.get(key.clone()),
                     )
                 }),
             },
+        }
+    }
+
+    fn try_stringify_potential_lua_value(
+        &self,
+        it: Result<LuaValue, LuaError>,
+    ) -> Result<String, StepError> {
+        match it {
+            Ok(LuaValue::Nil) => Err(StepError::RequestedLuaValueWhereNoneExists),
+            Ok(LuaValue::Boolean(val)) => Ok(val.to_string()),
+            Ok(LuaValue::Integer(val)) => Ok(val.to_string()),
+            Ok(LuaValue::Number(val)) => Ok(val.to_string()),
+            Ok(LuaValue::String(val)) => Ok(val.to_str()?.into()),
+            Ok(
+                LuaValue::Table(..)
+                | LuaValue::Function(..)
+                | LuaValue::UserData(..)
+                | LuaValue::LightUserData(..),
+            ) => Err(StepError::RefuseToStringifyComplexLuaValue),
+            Ok(LuaValue::Thread { .. } | LuaValue::Error { .. }) => {
+                Err(StepError::RefuseToStringifyComplexLuaValue)
+            }
+            Err(err) => Err(err.into()),
         }
     }
 }

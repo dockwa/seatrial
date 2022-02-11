@@ -1,4 +1,3 @@
-use rlua::{Lua, RegistryKey};
 use ureq::{Agent, AgentBuilder};
 use url::Url;
 
@@ -17,7 +16,7 @@ mod persona;
 mod pipe_contents;
 mod pipeline;
 mod pipeline_action;
-mod shared_lua;
+mod lua;
 mod situation;
 mod step_combinator;
 mod step_error;
@@ -32,7 +31,7 @@ use crate::persona::Persona;
 use crate::pipe_contents::PipeContents;
 use crate::pipeline::StepCompletion;
 use crate::pipeline_action::{ControlFlow, Http, PipelineAction as PA, Reference};
-use crate::shared_lua::attach_seatrial_stdlib;
+use crate::lua::LuaForPipeline;
 use crate::situation::Situation;
 use crate::step_combinator::step as do_step_combinator;
 use crate::step_error::{StepError, StepResult};
@@ -113,48 +112,18 @@ fn grunt_worker(
     grunt: &Grunt,
     tx: mpsc::Sender<String>,
 ) {
-    let lua = Lua::default();
-    // TODO: no unwrap
-    attach_seatrial_stdlib(&lua).unwrap();
+    if situation.lua_file.is_none() {
+        unimplemented!("situations without 'lua_file' are not currently supported");
+    }
 
-    let user_script_registry_key = situation
-        .lua_file
-        .as_ref()
-        .map(|file| {
-            let fpath = if let Some(parent) = file.parent() {
-                let mut ret = parent.to_path_buf();
-                ret.push("?.lua");
-                ret.to_string_lossy().into_owned()
-            } else {
-                file.to_string_lossy().into_owned()
-            };
-            let fname = file
-                .file_stem()
-                .unwrap_or_else(|| file.as_os_str())
-                .to_string_lossy();
-
-            // TODO: something cleaner than unwrap() here
-            lua.context(|ctx| {
-                ctx.load(&format!(
-                    "package.path = package.path .. \";{}\"; _user_script = require('{}')",
-                    fpath, fname
-                ))
-                .set_name(&format!("user_script<{}, {}>", grunt.name, fpath))?
-                .exec()?;
-
-                let user_script = ctx.globals().get::<_, rlua::Table>("_user_script")?;
-
-                Ok(ctx
-                    .create_registry_value(user_script)
-                    .expect("should have stored user script in registry"))
-            })
-            .unwrap_or_else(|err: rlua::Error| {
-                eprintln!("[{}] aborting due to lua error", grunt.name);
-                eprintln!("[{}] err was: {}", grunt.name, err);
-                panic!();
-            })
-        })
-        .unwrap(); // TODO: remove and handle non-extant case
+    // TODO: no final unwrap. lua_file.unwrap() is guarded above.
+    let lua = LuaForPipeline::new(situation.lua_file.as_ref().unwrap()).unwrap_or_else(
+        |err: rlua::Error| {
+            eprintln!("[{}] aborting due to lua error", grunt.name);
+            eprintln!("[{}] err was: {}", grunt.name, err);
+            panic!();
+        },
+    );
 
     let persona = &situation.personas[grunt.persona_idx];
     let agent = AgentBuilder::new()
@@ -187,7 +156,6 @@ fn grunt_worker(
                 &situation.base_url,
                 persona,
                 &lua,
-                &user_script_registry_key,
                 &agent,
                 current_pipe_contents.as_ref(),
                 &mut goto_counters,
@@ -332,11 +300,7 @@ fn do_step<'a>(
     idx: usize,
     base_url: &Url,
     persona: &Persona,
-
-    // TODO: merge into a combo struct
-    lua: &'a Lua,
-    user_script_registry_key: &'a RegistryKey,
-
+    lua: &LuaForPipeline,
     agent: &Agent,
     last: Option<&PipeContents>,
     goto_counters: &mut HashMap<usize, usize>,
@@ -372,9 +336,7 @@ fn do_step<'a>(
         | PA::Reference(Reference::LuaTableValue(..))
         | PA::Reference(Reference::LuaValue) => Err(StepError::InvalidActionInContext),
 
-        PA::LuaFunction(fname) => {
-            do_step_lua_function(idx, fname, lua, user_script_registry_key, last)
-        }
+        PA::LuaFunction(fname) => do_step_lua_function(idx, fname, lua, last),
 
         act @ (PA::Http(Http::Delete {
             url,
@@ -428,12 +390,8 @@ fn do_step<'a>(
             )
         }
 
-        PA::Combinator(combo) => {
-            do_step_combinator(idx, combo, lua, user_script_registry_key, last)
-        }
+        PA::Combinator(combo) => do_step_combinator(idx, combo, lua, last),
 
-        PA::Validator(validator) => {
-            do_step_validator(idx, validator, lua, user_script_registry_key, last)
-        }
+        PA::Validator(validator) => do_step_validator(idx, validator, lua, last),
     }
 }
