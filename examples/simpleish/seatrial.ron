@@ -13,7 +13,7 @@
         "spam_reloader": (
             timeout: Seconds(30),
 
-            pipeline: [
+            sequence: [
                 LuaFunction("generate_30_day_range"),
                 Http(Get(
                     url: "/calendar",
