@@ -8,15 +8,15 @@ use rlua::{
 
 // values stored as markers in the Lua tables that get passed around as validation result "enums",
 // or a Lua approximation of the Rust concept thereof
-const VALIDATION_RESULT_CODE_KEY: &'static str = "_validation_result_code";
-const VALIDATION_RESULT_WARNINGS_KEY: &'static str = "_validation_result_warnings";
-const VALIDATION_RESULT_ERROR_KEY: &'static str = "_validation_result_error";
+const VALIDATION_RESULT_CODE_KEY: &str = "_validation_result_code";
+const VALIDATION_RESULT_WARNINGS_KEY: &str = "_validation_result_warnings";
+const VALIDATION_RESULT_ERROR_KEY: &str = "_validation_result_error";
 const VALIDATION_RESULT_OK_CODE: i8 = 1;
 const VALIDATION_RESULT_OK_WITH_WARNINGS_CODE: i8 = 2;
 const VALIDATION_RESULT_ERROR_CODE: i8 = 3;
 const VALIDATION_RESULT_TABLE_IDX_BOUNDS: (i8, i8) =
     (VALIDATION_RESULT_OK_CODE, VALIDATION_RESULT_ERROR_CODE); // keep up to date
-const VALIDATION_RESULT_MISSING_WARNING_ARG_MSG: &'static str =
+const VALIDATION_RESULT_MISSING_WARNING_ARG_MSG: &str =
     "expected at least one warning string, got none";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -137,7 +137,7 @@ impl<'lua> ToLua<'lua> for ValidationResult {
     }
 }
 
-pub fn attach_validationresult<'a>(lua: &'a Lua) -> LuaResult<()> {
+pub fn attach_validationresult(lua: &Lua) -> LuaResult<()> {
     lua.context(|ctx| {
         let globals = ctx.globals();
 

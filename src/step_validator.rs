@@ -53,7 +53,11 @@ pub fn step<'a>(
         }
 
         // TODO: should this put anything on the pipe?
-        (Some(contents), Validator::LuaFunction(fname)) => {
+        //
+        // TODO: see if there's a sane refactor of run_user_script_function to avoid
+        // double-guarding Option<PipeContents> here - for now, just discarding our current
+        // knowledge since run_user_script_function needs the entire Option object anyway
+        (Some(_), Validator::LuaFunction(fname)) => {
             let result_rk = run_user_script_function(fname, lua, user_script_registry_key, last)?;
             lua.context(|ctx| {
                 let validation_result: ValidationResult = ctx.registry_value(&result_rk)?;
@@ -66,7 +70,7 @@ pub fn step<'a>(
                         Ok(StepCompletion::WithWarnings {
                             next_index: idx + 1,
                             pipe_data: None,
-                            warnings: warnings,
+                            warnings,
                         })
                     }
                     ValidationResult::Error(err) => Err(StepError::Validation(err)),
@@ -93,8 +97,14 @@ fn assertion_to_warning(result: StepResult, idx: usize, contents: &PipeContents)
 
 #[derive(Debug)]
 struct AssertionPredicateArgs<'a> {
+    // allowing dead code on both of these for now because I know I plan to do rust-side
+    // content-type validators in the future, and there's likely something sane to be done with
+    // body eventually, I just don't know what yet
+    #[allow(dead_code)]
     body: &'a Vec<u8>,
+    #[allow(dead_code)]
     content_type: &'a String,
+
     headers: &'a HashMap<String, String>,
     status_code: u16,
 }
