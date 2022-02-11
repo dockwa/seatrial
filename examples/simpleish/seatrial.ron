@@ -3,6 +3,11 @@
 
     grunts: [
         (
+            base_name: "Postmaster General",
+            persona: "poster_child",
+            count: 1,
+        ),
+        (
             base_name: "Reloader Grunt",
             persona: "spam_reloader",
             count: 10,
@@ -10,6 +15,21 @@
     ],
 
     personas: {
+        "poster_child": (
+            timeout: Seconds(30),
+            sequence: [
+                LuaFunction("generate_profile"),
+                Http(Post(
+                    url: "/profile",
+                    body: LuaTableValue("profile"),
+                    headers: { "Content-Type": Value("application/json") },
+                )),
+                Combinator(AllOf([
+                    WarnUnlessStatusCodeInRange(200, 299),
+                    WarnUnlessHeaderExists("X-Never-Gonna-Give-You-Up"),
+                ]))
+            ]
+        ),
         "spam_reloader": (
             timeout: Seconds(30),
 

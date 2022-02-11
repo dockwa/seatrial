@@ -1,12 +1,40 @@
 use chrono::prelude::*;
 use vial::prelude::*;
+use nanoserde::{DeJson, DeJsonErr};
 
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 routes! {
+    POST "/profile" => create_profile;
     GET "/calendar" => calendar;
+}
+
+#[derive(Debug, DeJson)]
+struct Profile {
+    email: String,
+    first_name: Option<String>,
+    last_name: Option<String>,
+}
+
+#[derive(Debug)]
+enum CreateProfileError {
+    Json(DeJsonErr),
+}
+
+impl From<DeJsonErr> for CreateProfileError {
+    fn from(err: DeJsonErr) -> Self {
+        Self::Json(err)
+    }
+}
+
+impl Display for CreateProfileError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CreateProfileError::Json(e) => write!(f, "{}", e),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -41,6 +69,29 @@ impl Display for CalendarError {
     }
 }
 
+fn artificial_delay() {
+    // sleep for up to two seconds to simulate doing work
+    let artificial_delay = Duration::from_millis((rand::random::<f64>() * 2000.00).round() as u64);
+    std::thread::sleep(artificial_delay);
+}
+
+impl Error for CreateProfileError {}
+
+fn create_profile(req: Request) -> Result<String, CreateProfileError> {
+    artificial_delay();
+
+    let profile: Profile = DeJson::deserialize_json(req.body())?;
+
+    let response = format!(
+        "Successfully created profile for {}.",
+        profile.email
+    );
+
+    eprintln!("debug: {}", response);
+
+    Ok(response)
+}
+
 impl Error for CalendarError {}
 
 fn calendar(req: Request) -> Result<String, CalendarError> {
@@ -71,9 +122,7 @@ fn calendar(req: Request) -> Result<String, CalendarError> {
 
     let diff = end_date - start_date;
 
-    // sleep for up to two seconds to simulate doing work
-    let artificial_delay = Duration::from_millis((rand::random::<f64>() * 2000.00).round() as u64);
-    std::thread::sleep(artificial_delay);
+    artificial_delay();
 
     // some contrived esoteric format just designed to give the LuaFunction validator something
     // worth doing
