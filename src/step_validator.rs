@@ -1,22 +1,16 @@
-use rlua::{Lua, RegistryKey};
-
 use std::collections::HashMap;
 
 use crate::pipe_contents::PipeContents;
 use crate::pipeline::StepCompletion;
 use crate::pipeline_action::Validator;
-use crate::shared_lua::run_user_script_function;
-use crate::shared_lua::stdlib::ValidationResult;
+use crate::lua::stdlib::ValidationResult;
+use crate::lua::LuaForPipeline;
 use crate::step_error::{StepError, StepResult};
 
 pub fn step<'a>(
     idx: usize,
     it: &Validator,
-
-    // TODO: merge into a combo struct
-    lua: &'a Lua,
-    user_script_registry_key: &'a RegistryKey,
-
+    lua: &LuaForPipeline,
     last: Option<&'a PipeContents>,
 ) -> StepResult {
     match (last, it) {
@@ -58,7 +52,7 @@ pub fn step<'a>(
         // double-guarding Option<PipeContents> here - for now, just discarding our current
         // knowledge since run_user_script_function needs the entire Option object anyway
         (Some(_), Validator::LuaFunction(fname)) => {
-            let result_rk = run_user_script_function(fname, lua, user_script_registry_key, last)?;
+            let result_rk = lua.run_user_script_function(fname, last)?;
             lua.context(|ctx| {
                 let validation_result: ValidationResult = ctx.registry_value(&result_rk)?;
                 match validation_result {
