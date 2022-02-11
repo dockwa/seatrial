@@ -3,7 +3,7 @@ use nanoserde::DeRon;
 use std::collections::HashMap;
 
 use crate::config_duration::ConfigDuration;
-use crate::pipeline_action::{ConfigActionMap, PipelineAction};
+use crate::pipeline::action::{ConfigActionMap, PipelineAction};
 
 // built out of a PersonaSpec during Situation construction
 #[derive(Clone, Debug)]
@@ -17,5 +17,5 @@ pub struct Persona {
 pub struct PersonaSpec {
     pub timeout: ConfigDuration,
     pub headers: Option<ConfigActionMap>,
-    pub pipeline: Vec<PipelineAction>,
+    pub sequence: Vec<PipelineAction>,
 }

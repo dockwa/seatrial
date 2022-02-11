@@ -6,7 +6,7 @@ use std::io::{Error as IOError, Read, Result as IOResult};
 use std::rc::Rc;
 
 use crate::http_response_table::HttpResponseTable;
-use crate::step_error::StepError;
+use crate::pipeline::step_handler::StepError;
 
 #[derive(Clone, Debug)]
 pub enum PipeContents {
