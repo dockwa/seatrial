@@ -1,5 +1,6 @@
 -- uses https://tieske.github.io/date/, a pure-Lua date library
 local date = require('date')
+local json = require('json')
 
 local ESOTERIC_FORMAT_REGEX = "^DAYS (%d+) SYEAR (%d+) EYEAR (%d+) SMON (%d+) EMON (%d+) SDAY (%d+) EDAY (%d+)$"
 
@@ -20,7 +21,18 @@ function is_valid_esoteric_format(arg)
 	return ValidationResult.Ok()
 end
 
+function generate_profile()
+	return {
+		profile = json.encode({
+			first_name = 'Paul',
+			last_name = 'Stamets',
+			email = 'paul.stamets@ilovefungus.biz'
+		})
+	}
+end
+
 return {
 	generate_30_day_range = generate_30_day_range,
 	is_valid_esoteric_format = is_valid_esoteric_format,
+	generate_profile = generate_profile,
 }
