@@ -1,10 +1,10 @@
 use rlua::{Context, Lua, RegistryKey, Result as LuaResult};
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::rc::Rc;
 
 use crate::pipe_contents::PipeContents;
-use crate::step_error::StepError;
+use crate::pipeline::step_handler::StepError;
 
 pub mod stdlib;
 use stdlib::attach_seatrial_stdlib;
@@ -17,7 +17,7 @@ pub struct LuaForPipeline {
 }
 
 impl LuaForPipeline {
-    pub fn new(user_script_path: &PathBuf) -> LuaResult<Self> {
+    pub fn new(user_script_path: &Path) -> LuaResult<Self> {
         let lua = Lua::default();
         attach_seatrial_stdlib(&lua)?;
 
@@ -63,7 +63,7 @@ impl LuaForPipeline {
     }
 }
 
-fn attach_user_script(lua: &Lua, user_script_path: &PathBuf) -> LuaResult<Rc<RegistryKey>> {
+fn attach_user_script(lua: &Lua, user_script_path: &Path) -> LuaResult<Rc<RegistryKey>> {
     let fpath = if let Some(parent) = user_script_path.parent() {
         let mut ret = parent.to_path_buf();
         ret.push("?.lua");
