@@ -1,13 +1,35 @@
-on: push
-name: Clippy
+on:
+  - push
+name: lint
 jobs:
-  clippy_check:
+  clippy:
+    name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - run: rustup install 1.58.0 # keep in sync with MSRV in README.md/Cargo.toml
-      - run: rustup component add clippy
-      - uses: actions-rs/clippy-check@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+          profile: minimal
+          toolchain: 1.58.0 # keep in sync with MSRV in README.md/Cargo.toml
+          override: true
+          components: rustfmt, clippy
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
+
+  rustfmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.58.0 # keep in sync with MSRV in README.md/Cargo.toml
+          override: true
+          components: rustfmt, clippy
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check

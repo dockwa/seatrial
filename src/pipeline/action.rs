@@ -3,11 +3,11 @@ use rlua::{Error as LuaError, Value as LuaValue};
 
 use std::collections::HashMap;
 
-use crate::lua::LuaForPipeline;
+use crate::combinator::Action as CombinatorAction;
 use crate::http::Action as HttpAction;
+use crate::lua::LuaForPipeline;
 use crate::pipe_contents::PipeContents as PC;
 use crate::pipeline::step_handler::StepError;
-use crate::combinator::Action as CombinatorAction;
 use crate::validator::Action as ValidatorAction;
 
 pub type ConfigActionMap = HashMap<String, Reference>;

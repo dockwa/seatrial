@@ -1,10 +1,10 @@
 use url::Url;
 
+use crate::combinator::CombinatorHandler;
+use crate::http::HttpHandler;
 use crate::lua::LuaForPipeline;
 use crate::persona::Persona;
 use crate::pipe_contents::PipeContents;
-use crate::combinator::CombinatorHandler;
-use crate::http::HttpHandler;
 use crate::validator::{Action as ValidatorAction, ValidatorHandler};
 
 use std::collections::HashMap;
