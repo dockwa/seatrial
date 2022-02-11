@@ -42,6 +42,7 @@ use crate::step_http::{
     step_head as do_step_http_head, step_post as do_step_http_post, step_put as do_step_http_put,
 };
 use crate::step_lua::step_function as do_step_lua_function;
+use crate::step_validator::step as do_step_validator;
 
 fn main() -> std::io::Result<()> {
     let args = parse_args();
@@ -365,12 +366,16 @@ fn do_step<'a>(
 
             do_step_goto(*index, persona)
         }
-        PA::Reference(Reference::LuaTableIndex(..))
+
+        PA::Reference(Reference::Value(..))
+        | PA::Reference(Reference::LuaTableIndex(..))
         | PA::Reference(Reference::LuaTableValue(..))
         | PA::Reference(Reference::LuaValue) => Err(StepError::InvalidActionInContext),
+
         PA::LuaFunction(fname) => {
             do_step_lua_function(idx, fname, lua, user_script_registry_key, last)
         }
+
         act @ (PA::Http(Http::Delete {
             url,
             headers,
@@ -422,13 +427,13 @@ fn do_step<'a>(
                 lua,
             )
         }
+
         PA::Combinator(combo) => {
             do_step_combinator(idx, combo, lua, user_script_registry_key, last)
         }
-        // TODO: remove
-        _ => Ok(StepCompletion::Normal {
-            next_index: idx + 1,
-            pipe_data: None,
-        }),
+
+        PA::Validator(validator) => {
+            do_step_validator(idx, validator, lua, user_script_registry_key, last)
+        }
     }
 }
