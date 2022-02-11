@@ -1,70 +1,22 @@
 use nanoserde::DeRon;
-use rlua::{Error as LuaError, Lua, Value as LuaValue};
+use rlua::{Error as LuaError, Value as LuaValue};
 
 use std::collections::HashMap;
 
-use crate::config_duration::ConfigDuration;
+use crate::lua::LuaForPipeline;
+use crate::http::Action as HttpAction;
 use crate::pipe_contents::PipeContents as PC;
-use crate::step_error::StepError;
+use crate::pipeline::step_handler::StepError;
+use crate::combinator::Action as CombinatorAction;
+use crate::validator::Action as ValidatorAction;
 
 pub type ConfigActionMap = HashMap<String, Reference>;
-
-// allow "all have same postfix" to pass since these names pass directly through to the config file
-// (thus become a ux implication)
-#[allow(clippy::enum_variant_names)]
-#[derive(Clone, Debug, DeRon)]
-pub enum Combinator {
-    AllOf(Vec<Validator>),
-    AnyOf(Vec<Validator>),
-    NoneOf(Vec<Validator>),
-}
 
 #[derive(Clone, Debug, DeRon)]
 pub enum ControlFlow {
     GoTo {
         index: usize,
         max_times: Option<usize>,
-    },
-}
-
-#[derive(Clone, Debug, DeRon)]
-pub enum Http {
-    // http verbs. this section could be fewer LOC with macros eg
-    // https://stackoverflow.com/a/37007315/17630058, but (1) this is still manageable (there's
-    // only a few HTTP verbs), and (2) rust macros are cryptic enough to a passer-by that if we're
-    // going to introduce them and their mental overhead to this codebase (other than depending on
-    // a few from crates), we should have a strong reason (and perhaps multiple usecases).
-
-    // TODO: figure out what, if anything, are appropriate guardrails for a PATCH verb
-    Delete {
-        url: String,
-        headers: Option<ConfigActionMap>,
-        params: Option<ConfigActionMap>,
-        timeout: Option<ConfigDuration>,
-    },
-    Get {
-        url: String,
-        headers: Option<ConfigActionMap>,
-        params: Option<ConfigActionMap>,
-        timeout: Option<ConfigDuration>,
-    },
-    Head {
-        url: String,
-        headers: Option<ConfigActionMap>,
-        params: Option<ConfigActionMap>,
-        timeout: Option<ConfigDuration>,
-    },
-    Post {
-        url: String,
-        headers: Option<ConfigActionMap>,
-        params: Option<ConfigActionMap>,
-        timeout: Option<ConfigDuration>,
-    },
-    Put {
-        url: String,
-        headers: Option<ConfigActionMap>,
-        params: Option<ConfigActionMap>,
-        timeout: Option<ConfigDuration>,
     },
 }
 
@@ -82,12 +34,15 @@ pub enum Reference {
 impl Reference {
     pub fn try_into_string_given_pipe_data(
         &self,
-        lua: &Lua,
+        lua: Option<&LuaForPipeline>,
         pipe_data: Option<&PC>,
     ) -> Result<String, StepError> {
-        match self {
-            Reference::Value(it) => Ok(it.clone()),
-            Reference::LuaValue => match pipe_data {
+        match (self, lua) {
+            (Reference::Value(it), _) => Ok(it.clone()),
+
+            (_, None) => Err(StepError::LuaNotInstantiated),
+
+            (Reference::LuaValue, Some(lua)) => match pipe_data {
                 None => Err(StepError::RequestedLuaValueWhereNoneExists),
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
@@ -95,7 +50,8 @@ impl Reference {
                     self.try_stringify_potential_lua_value(ctx.registry_value::<rlua::Value>(rkey))
                 }),
             },
-            Reference::LuaTableIndex(idx) => match pipe_data {
+
+            (Reference::LuaTableIndex(idx), Some(lua)) => match pipe_data {
                 None => Err(StepError::RequestedLuaValueWhereNoneExists),
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
@@ -105,7 +61,8 @@ impl Reference {
                     )
                 }),
             },
-            Reference::LuaTableValue(key) => match pipe_data {
+
+            (Reference::LuaTableValue(key), Some(lua)) => match pipe_data {
                 None => Err(StepError::RequestedLuaValueWhereNoneExists),
                 // TODO: as with Unclassified itself, change this
                 Some(PC::HttpResponse { .. }) => Err(StepError::Unclassified),
@@ -123,7 +80,7 @@ impl Reference {
         it: Result<LuaValue, LuaError>,
     ) -> Result<String, StepError> {
         match it {
-            Ok(LuaValue::Nil) => Err(StepError::RequestedLuaValueWhereNoneExists),
+            Ok(LuaValue::Nil) => Err(StepError::RefuseToStringifyNonExistantValue),
             Ok(LuaValue::Boolean(val)) => Ok(val.to_string()),
             Ok(LuaValue::Integer(val)) => Ok(val.to_string()),
             Ok(LuaValue::Number(val)) => Ok(val.to_string()),
@@ -143,29 +100,11 @@ impl Reference {
 }
 
 #[derive(Clone, Debug, DeRon)]
-pub enum Validator {
-    // validations of whatever the current thing in the pipe is. Asserts are generally fatal when
-    // falsey, except in the context of an AnyOf or NoneOf combinator, which can "catch" the errors
-    // as appropriate. WarnUnless validations are never fatal and likewise can never fail a
-    // combinator
-    AssertHeaderEquals(String, String),
-    AssertHeaderExists(String),
-    AssertStatusCode(u16),
-    AssertStatusCodeInRange(u16, u16),
-    WarnUnlessHeaderEquals(String, String),
-    WarnUnlessHeaderExists(String),
-    WarnUnlessStatusCode(u16),
-    WarnUnlessStatusCodeInRange(u16, u16),
-
-    LuaFunction(String),
-}
-
-#[derive(Clone, Debug, DeRon)]
 pub enum PipelineAction {
-    Combinator(Combinator),
+    Combinator(CombinatorAction),
     ControlFlow(ControlFlow),
-    Http(Http),
+    Http(HttpAction),
     LuaFunction(String),
     Reference(Reference),
-    Validator(Validator),
+    Validator(ValidatorAction),
 }
