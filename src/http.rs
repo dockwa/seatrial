@@ -2,10 +2,11 @@ use nanoserde::DeRon;
 use ureq::{Agent, AgentBuilder};
 
 use std::collections::HashMap;
+use std::io::Cursor;
 
 use crate::config_duration::ConfigDuration;
 use crate::persona::Persona;
-use crate::pipeline::action::{ConfigActionMap, PipelineAction};
+use crate::pipeline::action::{ConfigActionMap, PipelineAction, Reference};
 use crate::pipeline::step_handler::{
     StepCompletion, StepError, StepHandler, StepHandlerInit, StepResult,
 };
@@ -24,30 +25,35 @@ pub enum Action {
         url: String,
         headers: Option<ConfigActionMap>,
         params: Option<ConfigActionMap>,
+        body: Option<Reference>,
         timeout: Option<ConfigDuration>,
     },
     Get {
         url: String,
         headers: Option<ConfigActionMap>,
         params: Option<ConfigActionMap>,
+        body: Option<Reference>,
         timeout: Option<ConfigDuration>,
     },
     Head {
         url: String,
         headers: Option<ConfigActionMap>,
         params: Option<ConfigActionMap>,
+        body: Option<Reference>,
         timeout: Option<ConfigDuration>,
     },
     Post {
         url: String,
         headers: Option<ConfigActionMap>,
         params: Option<ConfigActionMap>,
+        body: Option<Reference>,
         timeout: Option<ConfigDuration>,
     },
     Put {
         url: String,
         headers: Option<ConfigActionMap>,
         params: Option<ConfigActionMap>,
+        body: Option<Reference>,
         timeout: Option<ConfigDuration>,
     },
 }
@@ -80,6 +86,16 @@ impl Action {
             | Self::Head { params, .. }
             | Self::Post { params, .. }
             | Self::Put { params, .. } => params.as_ref(),
+        }
+    }
+
+    pub fn body(&self) -> Option<&Reference> {
+        match self {
+            Self::Delete { body, .. }
+            | Self::Get { body, .. }
+            | Self::Head { body, .. }
+            | Self::Post { body, .. }
+            | Self::Put { body, .. } => body.as_ref(),
         }
     }
 
@@ -140,7 +156,15 @@ impl StepHandler for HttpHandler {
                     req = req.query(&key, &val);
                 }
 
-                req.call()
+                let req_result = match verb.body() {
+                    Some(body) => req.send(Cursor::new(
+                        body.try_into_string_given_pipe_data(pl.lua, pl.data.as_ref())?
+                            .into_bytes(),
+                    )),
+                    None => req.call(),
+                };
+
+                req_result
                     .and_then(|response| Ok(StepCompletion::Normal(Some(response.try_into()?))))
                     .or_else(|err| match err {
                         ureq::Error::Status(_, response) => {
