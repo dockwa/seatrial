@@ -48,7 +48,7 @@ fn all_of<'a>(
 
     last: Option<&'a PipeContents>,
 
-    it: &Vec<Validator>,
+    it: &[Validator],
 ) -> StepResult {
     let mut combined_warnings: Vec<String> = Vec::with_capacity(it.len());
 
@@ -87,7 +87,7 @@ fn any_of<'a>(
 
     last: Option<&'a PipeContents>,
 
-    it: &Vec<Validator>,
+    it: &[Validator],
 ) -> StepResult {
     for validator in it {
         if let result @ Ok(_) =
