@@ -164,7 +164,7 @@ pub fn attach_validationresult<'a>(lua: &'a Lua) -> LuaResult<()> {
 }
 
 #[test]
-fn test_seatrial_stdlib_validationresult_ok() -> LuaResult<()> {
+fn ok() -> LuaResult<()> {
     let lua = Lua::default();
     attach_validationresult(&lua)?;
 
@@ -178,7 +178,7 @@ fn test_seatrial_stdlib_validationresult_ok() -> LuaResult<()> {
 }
 
 #[test]
-fn test_seatrial_stdlib_validationresult_ok_with_warnings() -> LuaResult<()> {
+fn ok_with_warnings() -> LuaResult<()> {
     let lua = Lua::default();
     attach_validationresult(&lua)?;
 
@@ -192,7 +192,7 @@ fn test_seatrial_stdlib_validationresult_ok_with_warnings() -> LuaResult<()> {
 }
 
 #[test]
-fn test_seatrial_stdlib_validationresult_ok_with_warnings_multi() -> LuaResult<()> {
+fn ok_with_warnings_multi() -> LuaResult<()> {
     let lua = Lua::default();
     attach_validationresult(&lua)?;
 
@@ -211,7 +211,7 @@ fn test_seatrial_stdlib_validationresult_ok_with_warnings_multi() -> LuaResult<(
 }
 
 #[test]
-fn test_seatrial_stdlib_validationresult_ok_with_warnings_req_argument() -> LuaResult<()> {
+fn ok_with_warnings_req_argument() -> LuaResult<()> {
     let lua = Lua::default();
     attach_validationresult(&lua)?;
 
