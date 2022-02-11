@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use crate::lua::stdlib::ValidationResult;
 use crate::persona::Persona;
 use crate::pipe_contents::PipeContents;
+use crate::pipeline::action::PipelineAction as PA;
 use crate::pipeline::step_handler::{
     StepCompletion, StepError, StepHandler, StepHandlerInit, StepResult,
 };
 use crate::pipeline::Pipeline;
-use crate::pipeline::action::PipelineAction as PA;
 
 #[derive(Clone, Debug, DeRon)]
 pub enum Action {

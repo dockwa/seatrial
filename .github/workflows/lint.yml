@@ -16,13 +16,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          # uncomment below to fail the build on warnings. I'd like to do this
-          # in the future, but during this early rapid development, some
-          # warnings predate adding clippy to CI and I don't have time just yet
-          # to fix those things (which are slated for refactor later anyway, in
-          # the case of all the "too many arguments" issues)
-          #
-          # args: -- -D warnings
+          args: -- -D warnings
 
   rustfmt:
     name: rustfmt
