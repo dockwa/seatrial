@@ -6,16 +6,16 @@ use std::thread;
 use std::thread::JoinHandle;
 
 mod cli;
+mod combinator;
 mod config_duration;
 mod grunt;
+mod http;
 mod http_response_table;
 mod lua;
 mod persona;
 mod pipe_contents;
 mod pipeline;
 mod situation;
-mod combinator;
-mod http;
 mod validator;
 
 use crate::cli::parse_args;

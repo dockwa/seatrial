@@ -5,11 +5,11 @@ use std::collections::HashMap;
 
 use crate::config_duration::ConfigDuration;
 use crate::persona::Persona;
+use crate::pipeline::action::{ConfigActionMap, PipelineAction};
 use crate::pipeline::step_handler::{
     StepCompletion, StepError, StepHandler, StepHandlerInit, StepResult,
 };
 use crate::pipeline::Pipeline;
-use crate::pipeline::action::{ConfigActionMap, PipelineAction};
 
 #[derive(Clone, Debug, DeRon)]
 pub enum Action {
