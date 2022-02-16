@@ -18,13 +18,6 @@ indeed, for helping developers make such scale events, Non-Events).
 
 ## Usage
 
-> For further detail and commentary, see `man 1 seatrial`, or
-> `manual/seatrial.1.scd` in the source tree. While you're at it, there's also the
-> following other manual pages, accessible via the same pattern:
->
-> - `seatrial(5)`
-> - `seatrial.lua(3)`
-
 ```
 Usage: seatrial <base_url> <req_situation> [<situations...>] [-m <multiplier>]
 
@@ -40,6 +33,21 @@ Options:
   -m, --multiplier  integral multiplier for grunt counts (minimum 1)
   --help            display usage information
 ```
+
+Further detail, commentary, API documentation, etc. are provided in scdoc
+format in the source repo, and in Unix manual page format in installed copies
+of `seatrial`.
+
+- `seatrial(1)` documents the CLI application itself
+- `seatrial(5)` documents the configuration format
+- `seatrial.lua(3)` documents the Lua API to implement dynamic values and
+  validators
+
+In an installed copy of `seatrial`, including the Docker container, these are
+accessible with `man <section> <name>`, for example `man 3 seatrial.lua` or
+`docker run --rm -it <container tag> man 3 seatrial.lua`. From this source
+tree, provided [scdoc](https://git.sr.ht/~sircmpwn/scdoc) is installed, you can
+instead run, for example, `./read_manual_page 'seatrial.lua(3)'`.
 
 ## Development and Packaging
 
