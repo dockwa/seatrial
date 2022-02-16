@@ -1,7 +1,8 @@
 use url::Url;
 
 use std::str::FromStr;
-use std::sync::{mpsc, Arc, Barrier};
+use std::sync::mpsc::channel;
+use std::sync::{Arc, Barrier};
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -37,12 +38,10 @@ fn main() -> std::io::Result<()> {
     .unwrap();
 
     // TODO: get rid of unwrap!
-    let situations: Vec<Arc<Situation>> = args
+    let situations: Vec<Situation> = args
         .situations
         .iter()
-        .map(|situation| {
-            Arc::new(Situation::from_spec(situation, &base_url, args.multiplier).unwrap())
-        })
+        .map(|situation| Situation::from_spec(situation, &base_url, args.multiplier).unwrap())
         .collect();
 
     // TODO: find a less hacky way of dealing with situation lifecycles. this is a brute-force
@@ -54,34 +53,66 @@ fn main() -> std::io::Result<()> {
     // no need for any of the ephemeral *Spec objects at this point
     drop(args);
 
-    let mut situation_threads: Vec<JoinHandle<()>> = Vec::with_capacity(situations.len());
+    let (sit_tx, sit_rx) = channel::<Result<(), StepHandlerInitError>>();
     let barrier = Arc::new(Barrier::new(situations.len()));
+    let situation_threads = situations
+        .iter()
+        .map(|situation| {
+            let sit_tx = sit_tx.clone();
+            let barrier = barrier.clone();
 
-    for situation in situations {
-        let barrier = barrier.clone();
+            thread::spawn(move || {
+                let (grunt_tx, grunt_rx) = channel::<Result<(), StepHandlerInitError>>();
 
-        situation_threads.push(thread::spawn(move || {
-            let (tx, rx) = mpsc::channel();
+                let grunt_threads: Vec<_> = situation
+                    .grunts
+                    .iter()
+                    .map(|grunt| {
+                        let grunt_tx = grunt_tx.clone();
+                        let barrier = barrier.clone();
+                        let situation = situation.clone();
+                        thread::spawn(move || {
+                            grunt_tx
+                                .send(grunt_worker(barrier, &situation, grunt))
+                                .unwrap()
+                        })
+                    })
+                    .collect();
 
-            for grunt in &situation.grunts {
-                let barrier = barrier.clone();
-                let situation = situation.clone();
-                let tx = tx.clone();
+                drop(grunt_tx);
 
-                thread::spawn(move || grunt_worker(barrier, situation, grunt, tx));
-            }
+                for thread in grunt_threads {
+                    match grunt_rx.recv().unwrap() {
+                        Ok(_) => {
+                            // there's no actual guarantee here that thread is the same thread taht
+                            // sent whatever data we got, and that's okay, we're using this as a
+                            // lazy place to just ensure all threads have finished, not as a proper
+                            // data consolidation step
+                            thread.join().unwrap();
+                            sit_tx.send(Ok(()))
+                        }
+                        res @ Err(_) => sit_tx.send(res),
+                    }
+                    .ok();
+                }
+            })
+        })
+        .collect::<Vec<JoinHandle<_>>>();
 
-            // have to drop the original tx to get refcounts correct, else controller thread will
-            // hang indefinitely while rx thinks it has potential inbound data
-            drop(tx);
-
-            // does this even do anything to hold the thread open?
-            for _ in rx {}
-        }));
-    }
+    drop(sit_tx);
 
     for thread in situation_threads {
-        thread.join().unwrap();
+        match sit_rx.recv() {
+            Ok(_) => {
+                // there's no actual guarantee here that thread is the same thread taht sent
+                // whatever data we got, and that's okay, we're using this as a lazy place to just
+                // ensure all threads have finished, not as a proper data consolidation step
+                thread.join().unwrap();
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+        .expect("internal error: situation thread did not join");
     }
 
     Ok(())
@@ -89,9 +120,8 @@ fn main() -> std::io::Result<()> {
 
 fn grunt_worker(
     barrier: Arc<Barrier>,
-    situation: Arc<Situation>,
+    situation: &Situation,
     grunt: &Grunt,
-    tx: mpsc::Sender<()>,
 ) -> Result<(), StepHandlerInitError> {
     if situation.lua_file.is_none() {
         unimplemented!("situations without 'lua_file' are not currently supported");
@@ -108,12 +138,7 @@ fn grunt_worker(
 
     barrier.wait();
 
-    for step_result in Pipeline::new(
-        &grunt.name,
-        &situation.base_url,
-        &situation.personas[grunt.persona_idx],
-        Some(&lua),
-    )? {
+    for step_result in Pipeline::new(grunt, &situation.base_url, Some(&lua))? {
         match step_result {
             Ok(PipelineStepResult::Ok) => {}
 
@@ -141,9 +166,6 @@ fn grunt_worker(
     }
 
     grunt_exit(grunt);
-
-    // TODO should probably handle this more UX-sanely
-    tx.send(()).unwrap();
 
     Ok(())
 }

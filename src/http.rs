@@ -4,7 +4,7 @@ use ureq::{Agent, AgentBuilder};
 use std::collections::HashMap;
 
 use crate::config_duration::ConfigDuration;
-use crate::persona::Persona;
+use crate::grunt::Grunt;
 use crate::pipeline::action::{ConfigActionMap, PipelineAction, Reference};
 use crate::pipeline::step_handler::{
     StepCompletion, StepError, StepHandler, StepHandlerInit, StepResult,
@@ -114,14 +114,11 @@ pub struct HttpHandler {
 }
 
 impl StepHandler for HttpHandler {
-    fn new(grunt_name: &str, persona: &Persona) -> StepHandlerInit<Self> {
+    fn new(grunt: &Grunt) -> StepHandlerInit<Self> {
         Ok(Self {
             agent: AgentBuilder::new()
-                .user_agent(&format!(
-                    "seatrial/grunt={}/persona={}",
-                    grunt_name, persona.name
-                ))
-                .timeout((&persona.spec.timeout).into())
+                .user_agent(&format!("seatrial/grunt={}", grunt.name,))
+                .timeout((&grunt.persona.timeout).into())
                 .build(),
         })
     }

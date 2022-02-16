@@ -1,9 +1,9 @@
 use url::Url;
 
 use crate::combinator::CombinatorHandler;
+use crate::grunt::Grunt;
 use crate::http::HttpHandler;
 use crate::lua::LuaForPipeline;
-use crate::persona::Persona;
 use crate::pipe_contents::PipeContents;
 use crate::validator::{Action as ValidatorAction, ValidatorHandler};
 
@@ -41,10 +41,9 @@ struct PipelineHandlers {
 }
 
 #[derive(Debug)]
-pub struct Pipeline<'lua, 'persona, 'grunt_name, 'base_url> {
+pub struct Pipeline<'lua, 'grunt, 'base_url> {
     pub data: Option<PipeContents>,
-    pub persona: &'persona Persona,
-    pub grunt_name: &'grunt_name str,
+    pub grunt: &'grunt Grunt,
     pub base_url: &'base_url Url,
 
     // this should ideally become private, but for now,
@@ -57,30 +56,28 @@ pub struct Pipeline<'lua, 'persona, 'grunt_name, 'base_url> {
     handlers: PipelineHandlers,
 }
 
-impl<'lua, 'persona, 'grunt_name, 'base_url> Pipeline<'lua, 'persona, 'grunt_name, 'base_url> {
+impl<'lua, 'grunt, 'base_url> Pipeline<'lua, 'grunt, 'base_url> {
     pub fn new(
-        grunt_name: &'grunt_name str,
+        grunt: &'grunt Grunt,
         base_url: &'base_url Url,
-        persona: &'persona Persona,
         lua: Option<&'lua LuaForPipeline>,
     ) -> Result<Self, StepHandlerInitError> {
         Ok(Self {
-            grunt_name,
+            grunt,
             base_url,
-            persona,
             data: None,
 
             handlers: PipelineHandlers {
-                combinator: CombinatorHandler::new(grunt_name, persona)?,
-                http: HttpHandler::new(grunt_name, persona)?,
-                validator: ValidatorHandler::new(grunt_name, persona)?,
+                combinator: CombinatorHandler::new(grunt)?,
+                http: HttpHandler::new(grunt)?,
+                validator: ValidatorHandler::new(grunt)?,
             },
 
             lua,
             idx: 0,
             goto_counters: HashMap::with_capacity(
-                persona
-                    .spec
+                grunt
+                    .persona
                     .sequence
                     .iter()
                     .filter(|step| matches!(step, PA::ControlFlow(ControlFlow::GoTo { .. })))
@@ -154,7 +151,7 @@ impl<'lua, 'persona, 'grunt_name, 'base_url> Pipeline<'lua, 'persona, 'grunt_nam
                 .insert(index, self.goto_counters.get(&index).unwrap() - 1);
         }
 
-        if index > self.persona.spec.sequence.len() {
+        if index > self.grunt.persona.sequence.len() {
             // TODO: provide details (Unclassified is deprecated)
             return Err(StepError::Unclassified);
         }
@@ -166,13 +163,13 @@ impl<'lua, 'persona, 'grunt_name, 'base_url> Pipeline<'lua, 'persona, 'grunt_nam
     }
 }
 
-impl Iterator for Pipeline<'_, '_, '_, '_> {
+impl Iterator for Pipeline<'_, '_, '_> {
     type Item = Result<PipelineStepResult, StepError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let ret = self
+            .grunt
             .persona
-            .spec
             .sequence
             .get(self.idx)
             .map(|step| self.step(step));
