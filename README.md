@@ -55,6 +55,20 @@ The source must pass `rustfmt` and `clippy` without errors. It _should_ also
 pass without warnings, unless there's good reason to leave the warnings in
 place.
 
+MacOS users can use `brew bundle` to install the development dependencies as
+found in `Brewfile` (note that this will install Docker Desktop via its Cask;
+if you've installed Docker Desktop via some other means you may need to either
+uninstall your existing copy, or remove this line from `Brewfile`. Take
+care not to submit a PR with such a change in place!). Linux users should
+install `rustup` and `scdoc` via their distribution package manager. If
+`rustup` isn't available but a Rust of at least the MSRV is, then
+system-wide Rust is fine.
+
+If you've never worked with Rust before and `rustup` is freshly installed,
+you'll need to run `rustup-init` to pull Cargo, the Rust toolchain, etc.
+
+Tangentially to all of this, a `Dockerfile` is provided if preferred.
+
 ## Legal
 
 This is released under the terms of the ISC License:
