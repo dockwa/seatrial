@@ -1,14 +1,12 @@
 use nanoserde::{DeRon, DeRonErr};
 use url::Url;
 
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{canonicalize, read_to_string};
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use crate::grunt::{Grunt, GruntSpec};
-use crate::persona::{Persona, PersonaSpec};
 
 // built out of a SituationSpec after post-parse contextual validations have been run
 #[derive(Clone, Debug)]
@@ -16,7 +14,6 @@ pub struct Situation {
     pub base_url: Url,
     pub lua_file: Option<PathBuf>,
     pub grunts: Vec<Grunt>,
-    pub personas: Vec<Persona>,
 }
 
 impl Situation {
@@ -25,104 +22,23 @@ impl Situation {
         base_url: &Url,
         grunt_multiplier: usize,
     ) -> Result<Self, SituationParseErr> {
-        let mut relocated_personas: HashMap<&str, usize> =
-            HashMap::with_capacity(spec.contents.personas.len());
-        let personas = spec
-            .contents
-            .personas
-            .iter()
-            .enumerate()
-            .map(|(idx, (name, spec))| {
-                relocated_personas.insert(name, idx);
-
-                Persona {
-                    name: name.into(),
-                    spec: spec.clone(),
-
-                    // TODO: populate with Value/LuaFunction returns, error on other PipelineAction
-                    // variants
-                    headers: HashMap::new(),
-                }
-            })
-            .collect();
         let grunts = {
-            let mut slot: usize = 0;
-            let mut grunts: Vec<Grunt> = Vec::with_capacity(
-                spec.contents
-                    .grunts
-                    .iter()
-                    .map(|grunt| grunt.real_count() * grunt_multiplier)
-                    .sum(),
-            );
+            let mut grunts: Vec<Grunt> = Vec::new();
 
-            for (idx, grunt_spec) in spec.contents.grunts.iter().enumerate() {
-                let num_grunts = grunt_spec.real_count();
-                if num_grunts < 1 {
-                    return Err(SituationParseErr {
-                        kind: SituationParseErrKind::Semantics {
-                            message: "if provided, grunt count must be >=1".into(),
-                            location: format!("grunts[{}]", idx),
-                        },
-                    });
-                }
-                let num_grunts = num_grunts * grunt_multiplier;
-
-                match relocated_personas.get(&*grunt_spec.persona) {
-                    Some(persona_idx) => {
-                        for _ in 0..num_grunts {
-                            grunts.push(Grunt {
-                                name: grunt_spec.formatted_name(slot),
-                                persona_idx: *persona_idx,
-                            });
-                            slot += 1;
-                        }
-                    }
-                    None => {
-                        return Err(SituationParseErr {
-                            kind: SituationParseErrKind::Semantics {
-                                message: format!(
-                                    "grunt refers to non-existent persona \"{}\"",
-                                    grunt_spec.persona
-                                ),
-                                location: format!("grunts[{}]", idx),
-                            },
-                        });
-                    }
-                }
+            for grunt_spec in spec.contents.grunts.iter() {
+                grunts.extend(Grunt::from_spec_with_multiplier(
+                    grunt_spec,
+                    grunt_multiplier,
+                )?);
             }
 
             grunts
         };
 
         Ok(Self {
-            base_url: base_url.clone(),
-            lua_file: {
-                // this attempts to canonicalize a given string, presuming it's a path to a file.
-                // if that fails, it will just pass the given string through to lua unchanged
-                // (perhaps we're requiring a lua library from elsewhere in the search path, or a
-                // native sofile, or whatever). Nones get passed all the way through, skipping the
-                // entire song and dance
-                spec.contents.lua_file.as_ref().map(|file| {
-                    let canon = canonicalize({
-                        let mut rel_base = PathBuf::from(&spec.source);
-                        rel_base.pop();
-                        rel_base.push(file);
-                        rel_base
-                    });
-
-                    if let Ok(path) = canon {
-                        path
-                    } else {
-                        if let Some(provided) = spec.contents.lua_file.as_ref() {
-                            eprintln!("[situation parser] error canonicalizing provided lua_file \"{}\" to a path, passing through to lua unmodified", provided);
-                        }
-
-                        PathBuf::from(file)
-                    }
-                })
-            },
             grunts,
-            personas,
+            base_url: base_url.clone(),
+            lua_file: spec.canonical_lua_file(),
         })
     }
 }
@@ -131,6 +47,28 @@ impl Situation {
 pub struct SituationSpec {
     source: String,
     contents: SituationSpecContents,
+}
+
+impl SituationSpec {
+    pub fn canonical_lua_file(&self) -> Option<PathBuf> {
+        // this attempts to canonicalize a given string, presuming it's a path to a file.
+        // if that fails, it will just pass the given string through to lua unchanged
+        // (perhaps we're requiring a lua library from elsewhere in the search path, or a
+        // native sofile, or whatever). Nones get passed all the way through, skipping the
+        // entire song and dance
+        self.contents.lua_file.as_ref().map(|file| {
+            canonicalize({
+                let mut rel_base = PathBuf::from(&self.source);
+                rel_base.pop();
+                rel_base.push(file);
+                rel_base
+            }).map_or_else(|_| {
+                eprintln!("[situation parser] error canonicalizing provided lua_file \"{}\" to a path, passing through to lua unmodified", file);
+
+                PathBuf::from(file)
+            }, |pb| pb)
+        })
+    }
 }
 
 impl FromStr for SituationSpec {
@@ -149,12 +87,11 @@ impl FromStr for SituationSpec {
 pub struct SituationSpecContents {
     lua_file: Option<String>,
     grunts: Vec<GruntSpec>,
-    personas: HashMap<String, PersonaSpec>,
 }
 
 #[derive(Debug)]
 pub struct SituationParseErr {
-    kind: SituationParseErrKind,
+    pub kind: SituationParseErrKind,
 }
 
 #[derive(Debug)]

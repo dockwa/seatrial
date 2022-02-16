@@ -2,8 +2,8 @@ use nanoserde::DeRon;
 
 use std::collections::HashMap;
 
+use crate::grunt::Grunt;
 use crate::lua::stdlib::ValidationResult;
-use crate::persona::Persona;
 use crate::pipe_contents::PipeContents;
 use crate::pipeline::action::PipelineAction as PA;
 use crate::pipeline::step_handler::{
@@ -33,7 +33,7 @@ pub enum Action {
 pub struct ValidatorHandler;
 
 impl StepHandler for ValidatorHandler {
-    fn new(_: &str, _: &Persona) -> StepHandlerInit<Self> {
+    fn new(_: &Grunt) -> StepHandlerInit<Self> {
         Ok(Self {})
     }
 
