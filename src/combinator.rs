@@ -1,6 +1,6 @@
 use nanoserde::DeRon;
 
-use crate::persona::Persona;
+use crate::grunt::Grunt;
 use crate::pipeline::action::PipelineAction;
 use crate::pipeline::step_handler::{
     StepCompletion, StepError, StepHandler, StepHandlerInit, StepResult,
@@ -22,7 +22,7 @@ pub enum Action {
 pub struct CombinatorHandler;
 
 impl StepHandler for CombinatorHandler {
-    fn new(_: &str, _: &Persona) -> StepHandlerInit<Self> {
+    fn new(_: &Grunt) -> StepHandlerInit<Self> {
         Ok(Self {})
     }
 

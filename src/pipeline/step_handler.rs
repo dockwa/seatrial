@@ -2,7 +2,7 @@ use rlua::Error as LuaError;
 
 use std::io::Error as IOError;
 
-use crate::persona::Persona;
+use crate::grunt::Grunt;
 use crate::pipe_contents::PipeContents;
 use crate::pipeline::action::PipelineAction;
 use crate::pipeline::Pipeline;
@@ -61,6 +61,6 @@ pub trait StepHandler
 where
     Self: Sized,
 {
-    fn new(grunt_name: &str, persona: &Persona) -> StepHandlerInit<Self>;
+    fn new(grunt: &Grunt) -> StepHandlerInit<Self>;
     fn step(&self, pl: &Pipeline, pa: &PipelineAction) -> StepResult;
 }
