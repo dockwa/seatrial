@@ -70,8 +70,8 @@ writing, such functionality is not yet concretely planned.
 
 # SEE ALSO
 
-*seatrial(5)*++
-*seatrial.lua(3)*
+- *seatrial(5)*
+- *seatrial.lua(3)*
 
 # AUTHORS
 
