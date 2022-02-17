@@ -2,7 +2,6 @@ use nanoserde::DeRon;
 use ureq::{Agent, AgentBuilder};
 
 use std::collections::HashMap;
-use std::io::Cursor;
 
 use crate::config_duration::ConfigDuration;
 use crate::persona::Persona;
@@ -157,10 +156,11 @@ impl StepHandler for HttpHandler {
                 }
 
                 let req_result = match verb.body() {
-                    Some(body) => req.send(Cursor::new(
-                        body.try_into_string_given_pipe_data(pl.lua, pl.data.as_ref())?
+                    Some(body) => req.send_bytes(
+                        &body
+                            .try_into_string_given_pipe_data(pl.lua, pl.data.as_ref())?
                             .into_bytes(),
-                    )),
+                    ),
                     None => req.call(),
                 };
 

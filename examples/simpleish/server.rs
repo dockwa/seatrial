@@ -14,7 +14,9 @@ routes! {
 #[derive(Debug, DeJson)]
 struct Profile {
     email: String,
+    #[allow(dead_code)]
     first_name: Option<String>,
+    #[allow(dead_code)]
     last_name: Option<String>,
 }
 
