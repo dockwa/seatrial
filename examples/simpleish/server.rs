@@ -1,6 +1,6 @@
 use chrono::prelude::*;
-use vial::prelude::*;
 use nanoserde::{DeJson, DeJsonErr};
+use vial::prelude::*;
 
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -14,7 +14,9 @@ routes! {
 #[derive(Debug, DeJson)]
 struct Profile {
     email: String,
+    #[allow(dead_code)]
     first_name: Option<String>,
+    #[allow(dead_code)]
     last_name: Option<String>,
 }
 
@@ -82,10 +84,7 @@ fn create_profile(req: Request) -> Result<String, CreateProfileError> {
 
     let profile: Profile = DeJson::deserialize_json(req.body())?;
 
-    let response = format!(
-        "Successfully created profile for {}.",
-        profile.email
-    );
+    let response = format!("Successfully created profile for {}.", profile.email);
 
     eprintln!("debug: {}", response);
 
