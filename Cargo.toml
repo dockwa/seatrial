@@ -1,15 +1,13 @@
 [package]
 name = "seatrial"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.58"
 
 [dependencies]
 argh = "0.1" # TODO: try to remove to get rid of syn compile time
 nanoserde = "0.1"
-pico-args = "0.4"
 rlua = "0.18"
-strfmt = "0.1"
 ureq = "2.4"
 url = "2.2"
 
